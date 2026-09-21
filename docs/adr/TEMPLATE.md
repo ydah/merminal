@@ -1,17 +1,16 @@
-# ADR-NNNN: Title
+# ADR-NNNN: Decision title
 
-## Situation
+- Status: Proposed
 
-Describe the decision to make.
+## Context
+
+State the implementation choice, relevant constraints, and credible alternatives.
+If there is no meaningful alternative, document the behavior elsewhere instead.
 
 ## Decision
 
-State the chosen approach.
+State the durable choice and where it applies.
 
-## Reason
+## Consequences
 
-Explain the evidence and alternatives.
-
-## Result
-
-Record the consequences and review point.
+State the important benefits, costs, and what would justify revisiting it.
