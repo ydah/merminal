@@ -6,12 +6,12 @@ Labels need space near routed edges.
 
 ## Decision
 
-Place labels next to the corresponding edge track. Track allocation reserves their display width, and placement moves a label to the next free row or column when another label or node occupies its first position.
+Place a sized label node at the middle rank of each labeled edge. The edge passes beside its text. Self loop labels use the next free row or column beside their outside route.
 
 ## Reason
 
-The channel already reserves track rows and keeps labels outside node boxes.
+Including the label in ordering reserves space before routing.
 
 ## Result
 
-Dense crossings can still reduce legibility. The design's normalized label nodes remain a layout upgrade before v1.0.
+Dense crossings can still reduce legibility.

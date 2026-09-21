@@ -151,11 +151,12 @@ RSpec.describe MermaidTerm do
   end
 
   it "shares channel tracks for disjoint edges and branches" do
-    ["graph TB\nA-->B\nC-->D", "graph TB\nA-->B\nA-->C"].each do |source|
-      edges = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Polyline)
-                             .select { |item| item.role == :edge }
-      expect(edges.map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
-    end
+    edges = described_class.parse("graph TB\nA-->B\nC-->D").scene.items.grep(MermaidTerm::Scene::Polyline)
+                           .select { |item| item.role == :edge }
+    expect(edges.map { |edge| edge.points.length }).to eq([2, 2])
+    edges = described_class.parse("graph TB\nA-->B\nA-->C").scene.items.grep(MermaidTerm::Scene::Polyline)
+                           .select { |item| item.role == :edge }
+    expect(edges.first.points.first).to eq(edges.last.points.first)
     edges = described_class.parse("graph TB\nA-->C\nA-->D\nB-->C\nB-->D").scene.items
                            .grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
     expect(edges.first(2).map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
@@ -168,18 +169,39 @@ RSpec.describe MermaidTerm do
     layout = MermaidTerm::Flowchart::Layout.new(document.ast)
     layout.send(:orient_edges)
     layout.send(:assign_ranks)
+    layout.send(:normalize_edges)
     ranks = layout.instance_variable_get(:@ranks)
-    layout.instance_variable_set(:@groups, document.ast.nodes.group_by { |node| ranks.fetch(node.id) })
+    layout.instance_variable_set(:@groups, layout.instance_variable_get(:@work_nodes).group_by { |node| ranks.fetch(node.id) })
     expect(layout.send(:crossing_count)).to eq(1)
     layout.send(:order_nodes)
     expect(layout.send(:crossing_count)).to eq(0)
   end
 
-  it "separates channel tracks when edge labels would overlap" do
+  it "normalizes long and labeled edges before ordering" do
+    source = "graph TB\nA ----> B\nB -->|a label| C"
+    layout = MermaidTerm::Flowchart::Layout.new(described_class.parse(source).ast)
+    layout.scene
+    paths = layout.instance_variable_get(:@edge_paths)
+    ranks = layout.instance_variable_get(:@ranks)
+    work = layout.instance_variable_get(:@work_nodes)
+    positions = layout.instance_variable_get(:@positions)
+    expect(paths.values.map(&:length)).to eq([4, 3])
+    paths.each_value do |path|
+      expect(path.each_cons(2).all? { |a, b| ranks[b] == ranks[a] + 1 }).to be(true)
+    end
+    dummies = work.grep(MermaidTerm::Flowchart::Layout::WorkNode).select { |node| node.kind == :dummy }
+    expect(dummies.map { |node| positions.fetch(node.id)[0] }.uniq.length).to eq(1)
+    expect(work.grep(MermaidTerm::Flowchart::Layout::WorkNode).count { |node| node.kind == :label }).to eq(1)
+  end
+
+  it "reserves disjoint spaces for edge labels" do
     source = "graph TB\nA -->|first-long-label| B\nC -->|second-long-label| D"
     labels = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Text)
                             .select { |item| item.role == :edge_label }
-    expect(labels.map(&:y).uniq.length).to eq(2)
+    expect(labels.length).to eq(2)
+    expect(labels.first.y != labels.last.y ||
+           labels.first.x + MermaidTerm::Text.width(labels.first.string) <= labels.last.x ||
+           labels.last.x + MermaidTerm::Text.width(labels.last.string) <= labels.first.x).to be(true)
     expect(described_class.render(source)).to include("first-long-label", "second-long-label")
   end
 
@@ -312,6 +334,7 @@ RSpec.describe MermaidTerm do
       layout = MermaidTerm::Flowchart::Layout.new(document.ast)
       layout.send(:orient_edges)
       layout.send(:assign_ranks)
+      layout.send(:normalize_edges)
       layout.send(:order_nodes)
       layout.instance_variable_get(:@groups).each_value do |rank_nodes|
         groups.each do |group|

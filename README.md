@@ -67,7 +67,7 @@ This is an independent implementation. Thanks to [termaid](https://github.com/fa
 
 ## Known limitations
 
-Long flowchart edges use outside lanes, and dense edge labels can still cross lines. [The layout decision](docs/adr/0004-layered.md) and [label decision](docs/adr/0006-labels.md) record the remaining normalization work. Scene and plugin interfaces are experimental.
+Self loops use outside lanes, and dense edge labels can still cross lines. [The layout decision](docs/adr/0004-layered.md) and [label decision](docs/adr/0006-labels.md) describe the routing. Scene and plugin interfaces are experimental.
 
 ## Development
 
