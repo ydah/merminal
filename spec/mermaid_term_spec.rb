@@ -309,6 +309,16 @@ RSpec.describe MermaidTerm do
     Dir.glob(File.expand_path("fixtures/subgraph_cases/*.mmd", __dir__)).each do |path|
       document = described_class.parse(File.read(path))
       groups = document.ast.subgraphs
+      layout = MermaidTerm::Flowchart::Layout.new(document.ast)
+      layout.send(:orient_edges)
+      layout.send(:assign_ranks)
+      layout.send(:order_nodes)
+      layout.instance_variable_get(:@groups).each_value do |rank_nodes|
+        groups.each do |group|
+          positions = rank_nodes.each_index.select { |index| group.node_ids.include?(rank_nodes[index].id) }
+          expect(positions.max - positions.min + 1).to eq(positions.length) unless positions.empty?
+        end
+      end
       frames = document.scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :container_border }.map(&:rect)
       nodes = document.ast.nodes.map(&:id).zip(document.scene.items.grep(MermaidTerm::Scene::Box)
                                   .select { |item| item.role == :node_border }.map(&:rect)).to_h
