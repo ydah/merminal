@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "shareable"
+
 module MermaidTerm
   # Converts Scene primitives to terminal cells.
   module Raster

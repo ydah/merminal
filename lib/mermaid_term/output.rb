@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "shareable"
+
 module MermaidTerm
   # Plain and ANSI terminal output.
   module Output

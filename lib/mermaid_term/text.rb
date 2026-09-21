@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "shareable"
+
 module MermaidTerm
   # Terminal display widths, measured in cells rather than code points.
   module Text
