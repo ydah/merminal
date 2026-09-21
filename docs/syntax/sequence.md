@@ -11,3 +11,4 @@ sequenceDiagram
 ```
 
 Unsupported statements produce errors. Participant declaration order determines columns; undeclared participants use first appearance order.
+Pass `repeat_participants: true` to `render` to show participant boxes again at the bottom.

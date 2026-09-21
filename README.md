@@ -40,7 +40,7 @@ MermaidTerm.markdown_blocks("```mermaid\ngraph LR\nA-->B\n```").each do |block|
 end
 ```
 
-`MermaidTerm.register` accepts a plugin with `diagram_type`, `keywords`, `parse(source)`, and `layout(ast, **options)` methods. `Document#scene` exposes immutable drawing primitives.
+`MermaidTerm.register` accepts a plugin with `diagram_type`, `keywords`, `parse(source)`, and `layout(ast, **options)` methods. `Document#scene` exposes immutable drawing primitives. The Scene and plugin interfaces are experimental.
 
 ## Supported diagrams
 

@@ -65,7 +65,7 @@ module MermaidTerm::Diagrams
       [Diagram.new(participants: participants.values.freeze, events: events.freeze), findings]
     end
 
-    def self.layout(ast, **)
+    def self.layout(ast, repeat_participants: false, **)
       builder = Builder.new
       return builder.scene if ast.participants.empty?
 
@@ -167,6 +167,14 @@ module MermaidTerm::Diagrams
       end
       active.each do |id, starts|
         starts.each { |start, depth| builder.box(columns.fetch(id) - 1 + depth * 2, start, 3, bottom - start + 1) }
+      end
+      if repeat_participants
+        ast.participants.each do |participant|
+          center = columns.fetch(participant.id)
+          width = Text.width(participant.label) + 4
+          builder.box(center - width / 2, bottom + 1, width, 3, rounded: participant.actor)
+          builder.text(center - width / 2 + 2, bottom + 2, participant.label)
+        end
       end
       builder.scene
     end

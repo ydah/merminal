@@ -1,7 +1,12 @@
 module MermaidTerm
+  type charset = :unicode | :ascii
+  type color = bool | :auto | :always | :never
+  type theme = :default | :mono | :high_contrast | :solarized | String
+
   VERSION: String
 
-  def self.render: (String source, **untyped options) -> String
+  def self.render: (String source, ?charset: charset, ?color: color, ?theme: theme,
+                    ?width: Integer?, ?rounded: bool, ?strict: bool, **untyped options) -> String
   def self.parse: (String source, ?strict: bool) -> Document
   def self.markdown_blocks: (String markdown) -> Array[MarkdownBlock]
   def self.diagram_types: () -> Array[Symbol]
@@ -20,7 +25,8 @@ module MermaidTerm
     def type: () -> Symbol
     def diagnostics: () -> Array[Diagnostic]
     def scene: (**untyped options) -> Scene
-    def render: (**untyped options) -> String
+    def render: (?charset: charset, ?color: color, ?theme: theme, ?width: Integer?,
+                 ?rounded: bool, **untyped options) -> String
   end
 
   class Diagnostic
@@ -34,7 +40,8 @@ module MermaidTerm
   class MarkdownBlock
     def line: () -> Integer
     def source: () -> String
-    def render: (**untyped options) -> String
+    def render: (?charset: charset, ?color: color, ?theme: theme, ?width: Integer?,
+                 ?rounded: bool, ?strict: bool, **untyped options) -> String
   end
 
   class Scene

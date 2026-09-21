@@ -235,9 +235,22 @@ RSpec.describe MermaidTerm do
     registry&.delete(plugin)
   end
 
+  it "returns shareable parsed graphs and Scenes" do
+    document = described_class.parse("graph LR\nA-->B")
+    expect(Ractor.shareable?(document.ast)).to be(true)
+    expect(Ractor.shareable?(document.scene)).to be(true)
+  end
+
   it "keeps wide first sequence participants inside the Scene" do
     source = "sequenceDiagram\nparticipant A as A very long first participant\nA->>B: Hello\n"
     expect { described_class.render(source) }.not_to raise_error
+  end
+
+  it "can repeat sequence participant boxes at the bottom" do
+    source = "sequenceDiagram\nparticipant A as Alice\nparticipant B as Bob\nA->>B: Hello\n"
+    output = described_class.render(source, repeat_participants: true)
+    expect(output.scan("Alice").length).to eq(2)
+    expect(output.scan("Bob").length).to eq(2)
   end
 
   it "keeps randomly generated flowcharts inside their Scenes" do
