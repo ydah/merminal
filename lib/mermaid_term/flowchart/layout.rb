@@ -159,12 +159,18 @@ module MermaidTerm::Flowchart
       @width += @cluster_margin
       @height += @cluster_margin
       @outer_track = @horizontal ? @height + 2 : @width + 2
-      long_edges = @oriented.count { |_, from, to, _| (@ranks[to] - @ranks[from]).abs != 1 }
+      @outer_offsets = {}
+      outer_span = 0
+      @oriented.each do |edge, from, to, _|
+        next if @ranks[to] - @ranks[from] == 1 && from != to
+
+        @outer_offsets[edge.id] = outer_span
+        outer_span += @horizontal ? 2 : Text.width(edge.label.to_s, ambiguous_width: @ambiguous_width) + 2
+      end
       if @horizontal
-        @height += long_edges * 2 + 5
+        @height += outer_span + 5
       else
-        long_label = @oriented.filter_map { |edge, from, to, _| Text.width(edge.label.to_s) if @ranks[to] - @ranks[from] != 1 }.max.to_i
-        @width += long_edges * 2 + long_label + 5
+        @width += outer_span + 5
       end
       @width += @ast.edges.map { |edge| Text.width(edge.label.to_s, ambiguous_width: @ambiguous_width) }.max.to_i + 2
     end
@@ -178,7 +184,11 @@ module MermaidTerm::Flowchart
         a = port(from)
         b = port(to, end_port: true, edge_id: edge.id)
         left, right = [@horizontal ? a[1] : a[0], @horizontal ? b[1] : b[0]].minmax
-        group = intervals[rank][from] ||= { left: left, right: right, edges: [] }
+        if !@horizontal && edge.label && !edge.label.empty?
+          right = [right, right + 1 + Text.width(edge.label, ambiguous_width: @ambiguous_width)].max
+        end
+        key = edge.label && !edge.label.empty? ? [from, edge.id] : from
+        group = intervals[rank][key] ||= { left: left, right: right, edges: [] }
         group[:left] = [group[:left], left].min
         group[:right] = [group[:right], right].max
         group[:edges] << edge.id
@@ -254,14 +264,12 @@ module MermaidTerm::Flowchart
     end
 
     def draw_edges
-      outer = 0
       @edge_item_indices = {}
       @oriented.each do |edge, from, to, _reversed|
         next if edge.stroke == :invisible
 
         if from == to || @ranks[to] - @ranks[from] != 1
-          points = outer_route(from, to, outer, edge.id)
-          outer += 1
+          points = outer_route(from, to, @outer_offsets.fetch(edge.id), edge.id)
         else
           points = channel_route(from, to, @track_for_edge.fetch(edge.id), edge.id)
         end
@@ -304,11 +312,11 @@ module MermaidTerm::Flowchart
       end
     end
 
-    def outer_route(from, to, index, edge_id)
+    def outer_route(from, to, offset, edge_id)
       # ponytail: long and cyclic edges use outside lanes; add channel segments if dense graphs need tighter layouts.
       a = port(from)
       b = port(to, end_port: true, edge_id: edge_id)
-      track = @outer_track + index * 2
+      track = @outer_track + offset
       if @horizontal
         turn = @groups[@ranks[from]].map { |node| @positions[node.id][0] + @sizes[node.id][0] }.max + 1
         [a, [turn, a[1]], [turn, track], [b[0] - 2, track], [b[0] - 2, b[1]], b]
@@ -344,7 +352,28 @@ module MermaidTerm::Flowchart
              end
       x = [[x, 0].max, @width - Text.width(text, ambiguous_width: @ambiguous_width)].min
       y = [[y, 0].max, @height - 1].min
+      while label_conflict?(x, y, text)
+        if @horizontal
+          y += 1
+          @height = [@height, y + 1].max
+        else
+          x += 1
+          @width = [@width, x + Text.width(text, ambiguous_width: @ambiguous_width)].max
+        end
+      end
       @items << Scene::Text.new(x: x, y: y, string: text, role: :edge_label, layer: :label, emphasis: nil)
+    end
+
+    def label_conflict?(x, y, text)
+      right = x + Text.width(text, ambiguous_width: @ambiguous_width)
+      @ast.nodes.any? do |node|
+        nx, ny = @positions.fetch(node.id)
+        nw, nh = @sizes.fetch(node.id)
+        y.between?(ny, ny + nh - 1) && right > nx && x < nx + nw
+      end || @items.any? do |item|
+        item.is_a?(Scene::Text) && item.role == :edge_label && item.y == y &&
+          right > item.x && x < item.x + Text.width(item.string, ambiguous_width: @ambiguous_width)
+      end
     end
 
     def add_subgraphs

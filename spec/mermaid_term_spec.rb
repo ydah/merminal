@@ -13,9 +13,12 @@ RSpec.describe MermaidTerm do
   end
 
   it "reports a snapshot mismatch with its cell and code points" do
+    updating = ENV.delete("UPDATE_SNAPSHOTS")
     matcher = match_snapshot("scene_demo_unicode")
     expect(matcher.matches?("x")).to be(false)
     expect(matcher.failure_message).to match(/1:1: U\+[0-9A-F]{4} .* expected, U\+0078 x actual/)
+  ensure
+    ENV["UPDATE_SNAPSHOTS"] = updating if updating
   end
 
   it "measures CJK, combining marks and ambiguous characters in cells" do
@@ -158,6 +161,14 @@ RSpec.describe MermaidTerm do
     expect(edges.first(2).map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
     expect(edges.last(2).map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
     expect(edges.first.points[1][1]).not_to eq(edges.last.points[1][1])
+  end
+
+  it "separates channel tracks when edge labels would overlap" do
+    source = "graph TB\nA -->|first-long-label| B\nC -->|second-long-label| D"
+    labels = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Text)
+                            .select { |item| item.role == :edge_label }
+    expect(labels.map(&:y).uniq.length).to eq(2)
+    expect(described_class.render(source)).to include("first-long-label", "second-long-label")
   end
 
   it "fits the public render API without truncating content" do
@@ -410,9 +421,16 @@ RSpec.describe MermaidTerm do
         end
       end
     end
-    scene.items.grep(MermaidTerm::Scene::Text).select { |item| item.role == :edge_label }.each do |label|
+    labels = scene.items.grep(MermaidTerm::Scene::Text).select { |item| item.role == :edge_label }
+    labels.each do |label|
       right = label.x + MermaidTerm::Text.width(label.string)
       expect(boxes.none? { |box| label.y >= box.y && label.y < box.y + box.height && right > box.x && label.x < box.x + box.width }).to be(true)
+    end
+    labels.combination(2).each do |a, b|
+      next unless a.y == b.y
+
+      expect(a.x + MermaidTerm::Text.width(a.string) <= b.x ||
+             b.x + MermaidTerm::Text.width(b.string) <= a.x).to be(true)
     end
     document.ast.nodes.each { |node| expect(output).to include(node.label) }
     expect(document.render(charset: :ascii)).to match(/\A[\x20-\x7e\n]*\z/)
