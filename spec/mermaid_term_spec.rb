@@ -67,6 +67,7 @@ RSpec.describe MermaidTerm do
       ascii = described_class.render(input, charset: :ascii)
       expect(unicode).to include("日本語", "Done")
       expect(ascii).to match(/\A[\x20-\x7e\n]*\z/)
+      expect(ascii).to include("??????")
       expect(unicode).to eq(described_class.render(input))
     end
   end
@@ -130,6 +131,14 @@ RSpec.describe MermaidTerm do
     expect(document.ast.nodes.map(&:label)).to eq(["x;y", "B"])
     expect(document.ast.edges.length).to eq(1)
     expect(document.diagnostics).to be_empty
+  end
+
+  it "keeps closing brackets inside quoted labels" do
+    document = described_class.parse('graph LR; A["x]y;z"] --> B')
+    expect(document.ast.nodes.map(&:label)).to eq(["x]y;z", "B"])
+    expect(document.diagnostics).to be_empty
+    slanted = described_class.parse('graph LR; A[/"x]y"/] --> B')
+    expect(slanted.ast.nodes.first.label).to eq("x]y")
   end
 
   it "gives converging arrows separate input cells" do

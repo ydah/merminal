@@ -214,26 +214,51 @@ module MermaidTerm
           return [shape || :rectangle, nil]
         end
         if scanner.peek(2) == "[/" || scanner.peek(2) == "[\\"
-          value = scanner.scan_until(/\]/)
+          value = scan_shape_content(scanner, "]", escape_closer: false)
           unless value
             error("unclosed node shape", line, scanner.pos + 1)
             return [:parallelogram, ""]
           end
           first = value[1]
-          last = value[-2]
+          last = value[-1]
           shape = first == last ? :parallelogram : :trapezoid
-          return [shape, value[2...-2]]
+          return [shape, value[2...-1].delete_prefix('"').delete_suffix('"')]
         end
         opener, closer, shape = SHAPES.find { |start, _, _| scanner.peek(start.length) == start }
         return [nil, nil] unless opener
 
         scanner.pos += opener.length
-        value = scanner.scan_until(Regexp.new(Regexp.escape(closer)))
+        value = scan_shape_content(scanner, closer)
         unless value
           error("unclosed node shape", line, scanner.pos + 1)
           return [shape, ""]
         end
-        [shape, value.delete_suffix(closer).delete_prefix('"').delete_suffix('"')]
+        [shape, value.delete_prefix('"').delete_suffix('"')]
+      end
+
+      def scan_shape_content(scanner, closer, escape_closer: true)
+        result = +""
+        quote = nil
+        escaped = false
+        until scanner.eos?
+          if !quote && (!escaped || !escape_closer) && scanner.peek(closer.bytesize) == closer
+            scanner.pos += closer.bytesize
+            return result
+          end
+
+          char = scanner.getch
+          if escaped
+            escaped = false
+          elsif char == "\\"
+            escaped = true
+          elsif quote == char
+            quote = nil
+          elsif !quote && (char == '"' || char == "'")
+            quote = char
+          end
+          result << char
+        end
+        nil
       end
 
       def marker(char)
