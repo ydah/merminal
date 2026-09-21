@@ -9,6 +9,7 @@ Gem::Specification.new do |spec|
   spec.email = ["t.yudai92@gmail.com"]
   spec.summary = "Render Mermaid diagrams as terminal text"
   spec.description = "A pure Ruby Mermaid diagram renderer for Unicode and ASCII terminals."
+  spec.homepage = "https://github.com/ydah/merminal"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.3"
   spec.files = Dir.glob("{lib,exe,docs,sig}/**/*", File::FNM_DOTMATCH).select { |path| File.file?(path) } + %w[README.md LICENSE.txt CHANGELOG.md]
