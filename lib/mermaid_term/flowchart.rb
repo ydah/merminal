@@ -52,6 +52,12 @@ module MermaidTerm
         rest.each_with_index do |line, index|
           split_statements(line.to_s).each { |statement| parse_statement(statement.strip, @source.line_map[index + 1] || 1) }
         end
+        group_ids = @subgraphs.map(&:id)
+        @edges.each do |edge|
+          from = group_ids.include?(edge.from) ? edge.from : nil
+          to = group_ids.include?(edge.to) ? edge.to : nil
+          @styles["group_edge:#{edge.id}"] = [from, to] if from || to
+        end
         @subgraphs.each do |group|
           representative = group.node_ids.first
           next unless representative

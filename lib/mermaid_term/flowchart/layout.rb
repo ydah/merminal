@@ -33,6 +33,8 @@ module MermaidTerm::Flowchart
       draw_nodes
       draw_edges
       add_subgraphs
+      clip_group_edges
+      draw_markers
       flip_items if @reverse
       Scene.new(width: @width, height: @height, items: @items.freeze)
     end
@@ -210,7 +212,8 @@ module MermaidTerm::Flowchart
     def draw_edges
       tracks = Hash.new(0)
       outer = 0
-      @oriented.each do |edge, from, to, reversed|
+      @edge_item_indices = {}
+      @oriented.each do |edge, from, to, _reversed|
         next if edge.stroke == :invisible
 
         if from == to || @ranks[to] - @ranks[from] != 1
@@ -225,9 +228,16 @@ module MermaidTerm::Flowchart
                                    pattern: edge.stroke == :dotted ? :dotted : :solid)
         style = @ast.styles["link:#{edge.id}"] || @ast.styles["link:default"]
         color = css_color(style, "stroke")
+        @edge_item_indices[edge.id] = @items.length
         @items << Scene::Polyline.new(points: points, stroke: stroke, role: color ? :"fg:#{color}" : :edge, layer: :edge)
-        marker_endpoint(edge, points, reversed)
         label_edge(edge, points) if edge.label && !edge.label.empty?
+      end
+    end
+
+    def draw_markers
+      @oriented.each do |edge, _, _, reversed|
+        index = @edge_item_indices[edge.id]
+        marker_endpoint(edge, @items[index].points, reversed) if index
       end
     end
 
@@ -298,6 +308,7 @@ module MermaidTerm::Flowchart
     end
 
     def add_subgraphs
+      @group_rects = {}
       @ast.subgraphs.each do |group|
         members = group.node_ids.uniq.filter_map { |id| @positions[id] && [@positions[id], @sizes[id]] }
         next if members.empty?
@@ -309,11 +320,39 @@ module MermaidTerm::Flowchart
         bottom = members.map { |(_, y), (_, h)| y + h }.max + padding - 1
         next if left.negative? || top.negative? || right >= @width || bottom >= @height
 
-        @items << Scene::Box.new(rect: Scene::Rect.new(x: left, y: top, width: right - left + 1, height: bottom - top + 1),
+        rect = Scene::Rect.new(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
+        @group_rects[group.id] = rect
+        @items << Scene::Box.new(rect: rect,
                                  stroke: Scene::LIGHT, corners: :sharp, role: :container_border, layer: :container)
         @items << Scene::Text.new(x: left + 2, y: top + 1, string: group.label, role: :container_title,
                                   layer: :label, emphasis: nil)
       end
+    end
+
+    def clip_group_edges
+      @ast.edges.each do |edge|
+        groups = @ast.styles["group_edge:#{edge.id}"]
+        index = @edge_item_indices[edge.id]
+        next unless groups && index
+
+        points = @items[index].points
+        points = clip_from_group(points, @group_rects[groups[0]]) if groups[0]
+        points = clip_from_group(points.reverse, @group_rects[groups[1]]).reverse if groups[1]
+        @items[index] = @items[index].with(points: points)
+      end
+    end
+
+    def clip_from_group(points, rect)
+      return points unless rect
+
+      inside = ->(x, y) { x.between?(rect.x, rect.x + rect.width - 1) && y.between?(rect.y, rect.y + rect.height - 1) }
+      index = points.each_cons(2).find_index { |a, b| inside.call(*a) && !inside.call(*b) }
+      return points unless index
+
+      a, b = points[index, 2]
+      x = b[0] < rect.x ? rect.x : b[0] >= rect.x + rect.width ? rect.x + rect.width - 1 : a[0]
+      y = b[1] < rect.y ? rect.y : b[1] >= rect.y + rect.height ? rect.y + rect.height - 1 : a[1]
+      [[x, y]] + points[(index + 1)..]
     end
 
     def group_depth(group)

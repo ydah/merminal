@@ -124,6 +124,12 @@ module MermaidTerm::Diagrams
       end
       findings << MermaidTerm::Diagrams.finding("unclosed state note", source, source.lines.length - 1) if open_note
       graph.styles["notes"] = notes unless notes.empty?
+      group_ids = graph.subgraphs.map(&:id)
+      graph.edges.each do |edge|
+        from = group_ids.include?(edge.from) ? edge.from : nil
+        to = group_ids.include?(edge.to) ? edge.to : nil
+        graph.styles["group_edge:#{edge.id}"] = [from, to] if from || to
+      end
       graph.subgraphs.each do |group|
         representative = group.node_ids.first
         next unless representative

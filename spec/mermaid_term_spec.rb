@@ -201,6 +201,16 @@ RSpec.describe MermaidTerm do
     end
   end
 
+  it "clips group endpoint edges to the group frame" do
+    source = File.read(File.expand_path("fixtures/subgraph_cases/group_10_endpoint.mmd", __dir__))
+    scene = described_class.parse(source).scene
+    frames = scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :container_border }.map(&:rect)
+    edges = scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
+    inner = frames.last
+    expect(edges.first.points.last[1]).to eq(inner.y)
+    expect(edges.last.points.first[0]).to eq(inner.x + inner.width - 1)
+  end
+
   it "accepts arbitrary bytes without leaking encoding exceptions" do
     rng = Random.new(118)
     headers = %w[graph sequenceDiagram stateDiagram-v2 classDiagram erDiagram pie xychart-beta gantt timeline mindmap]
@@ -250,12 +260,17 @@ RSpec.describe MermaidTerm do
     expect(output.lines.map { |line| MermaidTerm::Text.width(line.chomp) }.max).to be <= scene.width
     expect(output).to eq(document.render)
     boxes = scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :node_border }.map(&:rect)
+    frames = document.ast.subgraphs.map(&:id).zip(scene.items.grep(MermaidTerm::Scene::Box)
+                     .select { |item| item.role == :container_border }.map(&:rect)).to_h
     boxes.combination(2).each do |a, b|
       expect(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y).to be(true)
     end
-    scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }.each do |edge|
+    lines = scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
+    document.ast.edges.reject { |edge| edge.stroke == :invisible }.zip(lines).each do |ast_edge, edge|
+      group_ids = document.ast.styles["group_edge:#{ast_edge.id}"] || []
+      endpoints = boxes + group_ids.filter_map { |id| frames[id] }
       [edge.points.first, edge.points.last].each do |x, y|
-        expect(boxes.any? do |box|
+        expect(endpoints.any? do |box|
           x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height &&
             (x == box.x || x == box.x + box.width - 1 || y == box.y || y == box.y + box.height - 1)
         end).to be(true)

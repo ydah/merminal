@@ -6,6 +6,7 @@ require_relative "../lib/mermaid_term"
   links = (0...nodes - 1).map { |index| "N#{index} --> N#{index + 1}" }
   (edges - links.length).times { |index| links << "N#{index % (nodes - 3)} --> N#{index % (nodes - 3) + 3}" }
   source = "graph LR\n" + links.join("\n")
+  GC.start
   start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   MermaidTerm.render(source)
   elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
@@ -15,6 +16,7 @@ end
 
 source = "sequenceDiagram\n" + (0...10).map { |index| "participant P#{index}" }.join("\n") + "\n" +
          (0...100).map { |index| "P#{index % 10}->>P#{(index + 1) % 10}: message #{index}" }.join("\n")
+GC.start
 start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 MermaidTerm.render(source)
 elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
