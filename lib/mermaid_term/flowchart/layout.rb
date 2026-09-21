@@ -116,10 +116,6 @@ module MermaidTerm::Flowchart
       ranks = @groups.keys.sort
       cursor = 3 + @cluster_margin
       ranks.each do |rank|
-        channel_edges = @oriented.count { |_, from, to, _| @ranks[from] == rank - 1 && @ranks[to] == rank }
-        label_width = @oriented.filter_map { |edge, from, to, _| Text.width(edge.label.to_s) if @ranks[from] == rank - 1 && @ranks[to] == rank }.max.to_i
-        extra = [channel_edges * 2, @horizontal ? label_width : 0].max
-        cursor += [@rank_gap, extra + 2].max if rank.positive?
         order = 1 + @cluster_margin
         @groups[rank].each do |node|
           width, height = @sizes.fetch(node.id)
@@ -137,6 +133,27 @@ module MermaidTerm::Flowchart
           [edge.id, ((dimension - 1) * (index + 1).to_f / (incoming.length + 1)).round]
         end
       end
+      allocate_channel_tracks
+      cursor = 3 + @cluster_margin
+      ranks.each_with_index do |rank, index|
+        if index.positive?
+          previous = ranks[index - 1]
+          label_width = @oriented.filter_map do |edge, from, to, _|
+            Text.width(edge.label.to_s) if @ranks[from] == previous && @ranks[to] == rank
+          end.max.to_i
+          cursor += [@rank_gap, @track_count.fetch(previous, 0) * 2 + 2,
+                     @horizontal ? label_width + 4 : 0].max
+        end
+        @groups[rank].each do |node|
+          point = @positions.fetch(node.id)
+          @positions[node.id] = @horizontal ? [cursor, point[1]] : [point[0], cursor]
+        end
+        cursor += @groups[rank].map { |node| @horizontal ? @sizes[node.id][0] : @sizes[node.id][1] }.max.to_i
+      end
+      @rank_ends = @groups.to_h do |rank, nodes|
+        [rank, nodes.map { |node| @horizontal ? @positions[node.id][0] + @sizes[node.id][0] - 1 :
+                                           @positions[node.id][1] + @sizes[node.id][1] - 1 }.max]
+      end
       @width = @positions.map { |id, (x, _)| x + @sizes[id][0] }.max + 2
       @height = @positions.map { |id, (_, y)| y + @sizes[id][1] }.max + 2
       @width += @cluster_margin
@@ -150,6 +167,33 @@ module MermaidTerm::Flowchart
         @width += long_edges * 2 + long_label + 5
       end
       @width += @ast.edges.map { |edge| Text.width(edge.label.to_s, ambiguous_width: @ambiguous_width) }.max.to_i + 2
+    end
+
+    def allocate_channel_tracks
+      intervals = Hash.new { |hash, rank| hash[rank] = {} }
+      @oriented.each do |edge, from, to, _|
+        next unless from != to && @ranks[to] - @ranks[from] == 1
+
+        rank = @ranks[from]
+        a = port(from)
+        b = port(to, end_port: true, edge_id: edge.id)
+        left, right = [@horizontal ? a[1] : a[0], @horizontal ? b[1] : b[0]].minmax
+        group = intervals[rank][from] ||= { left: left, right: right, edges: [] }
+        group[:left] = [group[:left], left].min
+        group[:right] = [group[:right], right].max
+        group[:edges] << edge.id
+      end
+      @track_for_edge = {}
+      @track_count = {}
+      intervals.each do |rank, groups|
+        track_ends = []
+        groups.values.sort_by { |group| [group[:left], group[:right]] }.each do |group|
+          track = track_ends.index { |right| right + 1 < group[:left] } || track_ends.length
+          track_ends[track] = group[:right]
+          group[:edges].each { |id| @track_for_edge[id] = track }
+        end
+        @track_count[rank] = track_ends.length
+      end
     end
 
     def draw_nodes
@@ -210,7 +254,6 @@ module MermaidTerm::Flowchart
     end
 
     def draw_edges
-      tracks = Hash.new(0)
       outer = 0
       @edge_item_indices = {}
       @oriented.each do |edge, from, to, _reversed|
@@ -220,9 +263,7 @@ module MermaidTerm::Flowchart
           points = outer_route(from, to, outer, edge.id)
           outer += 1
         else
-          rank = @ranks[from]
-          points = channel_route(from, to, tracks[rank], edge.id)
-          tracks[rank] += 1
+          points = channel_route(from, to, @track_for_edge.fetch(edge.id), edge.id)
         end
         stroke = Scene::Stroke.new(weight: edge.stroke == :heavy ? :heavy : :light,
                                    pattern: edge.stroke == :dotted ? :dotted : :solid)
@@ -255,11 +296,10 @@ module MermaidTerm::Flowchart
     def channel_route(from, to, track, edge_id)
       a = port(from)
       b = port(to, end_port: true, edge_id: edge_id)
+      middle = @rank_ends.fetch(@ranks[from]) + 2 + track * 2
       if @horizontal
-        middle = a[0] + 2 + track * 2
         [a, [middle, a[1]], [middle, b[1]], b]
       else
-        middle = a[1] + 2 + track * 2
         [a, [a[0], middle], [b[0], middle], b]
       end
     end

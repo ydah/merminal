@@ -103,6 +103,19 @@ RSpec.describe MermaidTerm do
     expect(arrowheads.map { |item| [item.x, item.y] }.uniq.length).to eq(2)
   end
 
+  it "shares channel tracks for disjoint edges and branches" do
+    ["graph TB\nA-->B\nC-->D", "graph TB\nA-->B\nA-->C"].each do |source|
+      edges = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Polyline)
+                             .select { |item| item.role == :edge }
+      expect(edges.map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
+    end
+    edges = described_class.parse("graph TB\nA-->C\nA-->D\nB-->C\nB-->D").scene.items
+                           .grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
+    expect(edges.first(2).map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
+    expect(edges.last(2).map { |edge| edge.points[1][1] }.uniq.length).to eq(1)
+    expect(edges.first.points[1][1]).not_to eq(edges.last.points[1][1])
+  end
+
   it "fits the public render API without truncating content" do
     source = "graph TB\nA[Hello] --> B[World]\nA --> C[Other]"
     compact = described_class.render(source, width: 24)
