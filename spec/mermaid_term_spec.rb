@@ -163,6 +163,18 @@ RSpec.describe MermaidTerm do
     expect(edges.first.points[1][1]).not_to eq(edges.last.points[1][1])
   end
 
+  it "reduces crossings without making the initial order worse" do
+    document = described_class.parse("graph TB\nA\nB\nC\nD\nA-->D\nB-->C")
+    layout = MermaidTerm::Flowchart::Layout.new(document.ast)
+    layout.send(:orient_edges)
+    layout.send(:assign_ranks)
+    ranks = layout.instance_variable_get(:@ranks)
+    layout.instance_variable_set(:@groups, document.ast.nodes.group_by { |node| ranks.fetch(node.id) })
+    expect(layout.send(:crossing_count)).to eq(1)
+    layout.send(:order_nodes)
+    expect(layout.send(:crossing_count)).to eq(0)
+  end
+
   it "separates channel tracks when edge labels would overlap" do
     source = "graph TB\nA -->|first-long-label| B\nC -->|second-long-label| D"
     labels = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Text)

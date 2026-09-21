@@ -82,18 +82,71 @@ module MermaidTerm::Flowchart
       # ponytail: source order keeps cluster members together; add block median sweeps if crossings become a problem.
       return if @ast.subgraphs.any?
 
-      4.times do
-        [@groups.keys.sort, @groups.keys.sort.reverse].each do |ranks|
-          ranks.each do |rank|
-            neighbors = @groups[rank].to_h do |node|
-              ids = @oriented.filter_map do |_, from, to, _|
-                from == node.id ? to : to == node.id ? from : nil
+      best = @groups.transform_values(&:dup)
+      best_crossings = crossing_count
+      stalled = 0
+      8.times do |pass|
+        downward = pass.even?
+        ranks = downward ? @groups.keys.sort : @groups.keys.sort.reverse
+        ranks.each do |rank|
+          neighbor_rank = rank + (downward ? -1 : 1)
+          adjacent = @groups[neighbor_rank]
+          next unless adjacent
+
+          positions = adjacent.each_with_index.to_h { |node, index| [node.id, index] }
+          scores = @groups[rank].to_h do |node|
+            neighbors = @oriented.filter_map do |_, from, to, _|
+              if downward && to == node.id && @ranks[from] == neighbor_rank
+                positions[from]
+              elsif !downward && from == node.id && @ranks[to] == neighbor_rank
+                positions[to]
               end
-              positions = ids.filter_map { |id| @groups[@ranks[id]]&.index { |peer| peer.id == id } }
-              [node.id, positions.empty? ? nil : positions.sort[positions.length / 2]]
-            end
-            @groups[rank] = @groups[rank].each_with_index.sort_by { |node, index| [neighbors[node.id] || index, index] }.map(&:first)
+            end.sort
+            median = neighbors.empty? ? nil : (neighbors[(neighbors.length - 1) / 2] + neighbors[neighbors.length / 2]) / 2.0
+            [node.id, median]
           end
+          @groups[rank] = @groups[rank].each_with_index.sort_by { |node, index| [scores[node.id] || index, index] }.map(&:first)
+        end
+        count = crossing_count
+        if count < best_crossings
+          best = @groups.transform_values(&:dup)
+          best_crossings = count
+          stalled = 0
+        else
+          stalled += 1
+          break if stalled >= 2
+        end
+      end
+      @groups = best
+    end
+
+    def crossing_count
+      positions = @groups.transform_values { |nodes| nodes.each_with_index.to_h { |node, index| [node.id, index] } }
+      by_rank = Hash.new { |hash, rank| hash[rank] = [] }
+      @oriented.each do |_, from, to, _|
+        rank = @ranks[from]
+        next unless @ranks[to] == rank + 1
+
+        by_rank[rank] << [positions[rank][from], positions[rank + 1][to]]
+      end
+      by_rank.sum do |rank, edges|
+        tree = Array.new(@groups[rank + 1].length + 2, 0)
+        seen = 0
+        edges.sort_by { |from, to| [from, to] }.sum do |_, to|
+          index = to + 1
+          smaller_or_equal = 0
+          while index.positive?
+            smaller_or_equal += tree[index]
+            index -= index & -index
+          end
+          crossings = seen - smaller_or_equal
+          index = to + 1
+          while index < tree.length
+            tree[index] += 1
+            index += index & -index
+          end
+          seen += 1
+          crossings
         end
       end
     end
