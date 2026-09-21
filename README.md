@@ -65,6 +65,10 @@ Pie charts appear as horizontal bars because cell based terminals communicate pr
 
 This is an independent implementation. Thanks to [termaid](https://github.com/fasouto/termaid), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) for showing what terminal Mermaid tools can offer. Mermaid syntax belongs to the [Mermaid project](https://mermaid.js.org/).
 
+## Known limitations
+
+Long flowchart edges use outside lanes, and dense edge labels can still cross lines. [The layout decision](docs/adr/0004-layered.md) and [label decision](docs/adr/0006-labels.md) record the remaining normalization work. Scene and plugin interfaces are experimental.
+
 ## Development
 
 ```sh
