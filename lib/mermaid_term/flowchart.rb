@@ -62,7 +62,11 @@ module MermaidTerm
 
         case statement
         when /\Adirection\s+(TB|TD|BT|LR|RL)\z/
-          @direction = Regexp.last_match(1).to_sym unless @stack.any?
+          if @stack.any?
+            info("subgraph direction ignored", line)
+          else
+            @direction = Regexp.last_match(1).to_sym
+          end
         when /\Asubgraph\s+(.+)\z/
           name = Regexp.last_match(1).strip
           id, label = name =~ /\A([^\[]+)\[(.*)\]\z/ ? [Regexp.last_match(1).strip, Regexp.last_match(2)] : [name, name]
@@ -72,8 +76,18 @@ module MermaidTerm
           @stack.pop || error("unexpected end", line)
         when /\Astyle\s+(\S+)\s+(.+)\z/
           @styles[Regexp.last_match(1)] = Regexp.last_match(2)
-        when /\A(?:classDef|class|linkStyle|click)\b/
-          info("statement ignored", line)
+        when /\AclassDef\s+(\S+)\s+(.+)\z/
+          @styles["class:#{Regexp.last_match(1)}"] = Regexp.last_match(2)
+        when /\Aclass\s+([\w,.-]+)\s+(\S+)\z/
+          ids, name = Regexp.last_match.captures
+          ids.split(",").each do |id|
+            previous = @nodes[id]
+            @nodes[id] = previous.with(classes: (previous.classes + [name]).uniq.freeze) if previous
+          end
+        when /\AlinkStyle\s+(\S+)\s+(.+)\z/
+          @styles["link:#{Regexp.last_match(1)}"] = Regexp.last_match(2)
+        when /\Aclick\b/
+          info("click ignored", line)
         else
           parse_chain(statement, line)
         end
@@ -123,14 +137,20 @@ module MermaidTerm
             return nil
           end
           shape, label = parse_shape(scanner, line)
-          label ||= id
-          label = CGI.unescapeHTML(label.gsub(/<br\s*\/?\s*>/i, "\n").gsub(/<[^>]+>/, ""))
           previous = @nodes[id]
+          classes = []
+          while scanner.scan(/:::/)
+            name = scanner.scan(/[[:alnum:]_-]+/)
+            classes << name if name
+          end
+          label ||= previous&.label || id
+          label = CGI.unescapeHTML(label.gsub(/<br\s*\/?\s*>/i, "\n").gsub(/<[^>]+>/, ""))
           if previous && shape
             info("node #{id} redefined", line)
           end
           @nodes[id] = Node.new(id: id, label: shape ? label : previous&.label || label,
-                                shape: shape || previous&.shape || :rectangle, classes: [], source_pos: [line, scanner.pos])
+                                shape: shape || previous&.shape || :rectangle,
+                                classes: ((previous&.classes || []) + classes).uniq.freeze, source_pos: [line, scanner.pos])
           @subgraphs.find { |group| group.id == @stack.last }&.node_ids&.push(id) if @stack.any?
           ids << id
           scanner.skip(/\s*/)
@@ -140,6 +160,30 @@ module MermaidTerm
       end
 
       def parse_shape(scanner, line)
+        if scanner.scan(/@\{/)
+          value = scanner.scan_until(/\}/)
+          unless value
+            error("unclosed shape object", line, scanner.pos + 1)
+            return [:rectangle, ""]
+          end
+          name = value[/shape\s*:\s*([\w-]+)/, 1]
+          shape = { "rect" => :rectangle, "rounded" => :rounded, "diamond" => :decision,
+                    "hex" => :hexagon, "circle" => :circle, "stadium" => :stadium,
+                    "cyl" => :database, "subproc" => :subroutine }[name]
+          info("unknown shape #{name}", line) unless shape
+          return [shape || :rectangle, nil]
+        end
+        if scanner.peek(2) == "[/" || scanner.peek(2) == "[\\"
+          value = scanner.scan_until(/\]/)
+          unless value
+            error("unclosed node shape", line, scanner.pos + 1)
+            return [:parallelogram, ""]
+          end
+          first = value[1]
+          last = value[-2]
+          shape = first == last ? :parallelogram : :trapezoid
+          return [shape, value[2...-2]]
+        end
         opener, closer, shape = SHAPES.find { |start, _, _| scanner.peek(start.length) == start }
         return [nil, nil] unless opener
 

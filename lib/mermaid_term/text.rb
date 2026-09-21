@@ -70,12 +70,35 @@ module MermaidTerm
       string.to_s.split("\n", -1).flat_map do |line|
         result = []
         current = +""
-        each_cell(line, ambiguous_width: ambiguous_width) do |cluster, cells|
-          if width(current, ambiguous_width: ambiguous_width) + cells > max_width && !current.empty?
+        used = 0
+        line.scan(/\S+|\s+/).each do |token|
+          token_width = width(token, ambiguous_width: ambiguous_width)
+          if token.match?(/\A\s+\z/)
+            if used.positive? && used + token_width <= max_width
+              current << token
+              used += token_width
+            end
+            next
+          end
+          if used + token_width > max_width && used.positive?
             result << current.rstrip
             current = +""
+            used = 0
           end
-          current << cluster unless current.empty? && cluster == " "
+          if token_width <= max_width
+            current << token
+            used += token_width
+          else
+            each_cell(token, ambiguous_width: ambiguous_width) do |cluster, cells|
+              if used + cells > max_width && used.positive?
+                result << current.rstrip
+                current = +""
+                used = 0
+              end
+              current << cluster
+              used += cells
+            end
+          end
         end
         result << current
         result

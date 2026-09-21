@@ -19,7 +19,7 @@ module MermaidTerm
   # Prepared Mermaid source with original line numbers.
   Source = Data.define(:lines, :title, :directives, :line_map, :original, :diagnostics) do
     def self.parse(input)
-      original = input.to_s.scrub.gsub(/\r\n?/, "\n")
+      original = input.to_s.encode("UTF-8", invalid: :replace, undef: :replace).gsub(/\r\n?/, "\n")
       rows = original.lines
       title = nil
       directives = {}

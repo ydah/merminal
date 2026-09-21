@@ -1,39 +1,74 @@
-# Merminal
+# MermaidTerm
 
-TODO: Delete this and the text below, and describe your gem
+Pure Ruby terminal renderer for Mermaid diagrams. It runs without Node.js, a browser, external processes, or runtime gem dependencies.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/merminal`. To experiment with that code, run `bin/console` for an interactive prompt.
+## Install
 
-## Installation
+From this checkout:
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```sh
+gem build mermaid_term.gemspec
+gem install ./mermaid_term-0.1.0.gem
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Ruby 3.3 or newer is required.
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+## CLI
+
+```sh
+printf 'flowchart LR\nA[Start] --> B[Done]\n' | mmterm
+mmterm --ascii diagram.mmd
+mmterm --check --strict diagram.mmd
+mmterm --markdown README.md
+mmterm --width 80 --theme solarized --color always diagram.mmd
 ```
 
-## Usage
+`mmterm --help` lists every option. When a requested width cannot hold the diagram, the CLI reports the actual width and keeps the full drawing.
 
-TODO: Write usage instructions here
+## Ruby API
+
+```ruby
+require "mermaid_term"
+
+puts MermaidTerm.render("flowchart LR\nA --> B")
+document = MermaidTerm.parse("pie\n\"A\" : 3\n\"B\" : 7")
+warn document.diagnostics.map(&:to_s).join("\n")
+puts document.render(charset: :ascii)
+
+MermaidTerm.markdown_blocks("```mermaid\ngraph LR\nA-->B\n```").each do |block|
+  puts block.line, block.render
+end
+```
+
+`MermaidTerm.register` accepts a plugin with `diagram_type`, `keywords`, `parse(source)`, and `layout(ast, **options)` methods. `Document#scene` exposes immutable drawing primitives.
+
+## Supported diagrams
+
+The parser accepts a documented subset of each Mermaid diagram type. Unsupported statements produce line numbered diagnostics; `--strict` treats errors as failures.
+
+| Diagram | Syntax |
+|---|---|
+| Flowchart | [Flowchart](docs/syntax/flowchart.md) |
+| Sequence | [Sequence](docs/syntax/sequence.md) |
+| State | [State](docs/syntax/state.md) |
+| Class | [Class](docs/syntax/class.md) |
+| ER | [ER](docs/syntax/er.md) |
+| Pie | [Pie](docs/syntax/pie.md) |
+| XY chart | [XY chart](docs/syntax/xychart.md) |
+| Gantt | [Gantt](docs/syntax/gantt.md) |
+| Timeline | [Timeline](docs/syntax/timeline.md) |
+| Mindmap | [Mindmap](docs/syntax/mindmap.md) |
+
+Pie charts appear as horizontal bars because cell based terminals communicate proportions more clearly that way. Unicode ambiguous width defaults to one cell; set `ambiguous_width: 2` for terminals that use two. Emoji ZWJ sequences use the first grapheme code point's width, so some terminal fonts may differ. ASCII mode replaces non ASCII labels with `?`.
+
+This is an independent implementation. Thanks to [termaid](https://github.com/fasouto/termaid), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) for showing what terminal Mermaid tools can offer. Mermaid syntax belongs to the [Mermaid project](https://mermaid.js.org/).
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```sh
+bundle install
+bundle exec rake spec
+bundle exec rake gallery
+```
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/merminal.
-
-## License
-
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+`rake unicode:generate` accepts `EAW_FILE` and `UCD_FILE` paths to the official Unicode 17.0 files. It regenerates the checked in width and box drawing tables.

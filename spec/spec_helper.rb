@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "mermaid_term"
+require_relative "support/snapshot"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

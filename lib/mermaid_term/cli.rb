@@ -8,7 +8,7 @@ module MermaidTerm
     module_function
 
     def run(argv = ARGV, stdin: $stdin, stdout: $stdout, stderr: $stderr)
-      options = { charset: :unicode, color: :auto, theme: :default, rounded: true, crossings: :plain,
+      options = { charset: :unicode, color: :auto, theme: nil, rounded: true, crossings: :plain,
                   fit: :compact, check: false, strict: false, markdown: false, compact: false }
       parser = OptionParser.new do |p|
         p.banner = "Usage: mmterm [options] [FILE ...]"
@@ -35,7 +35,7 @@ module MermaidTerm
         return 0
       end
       raise OptionParser::InvalidArgument, "width must be positive" if options[:width] && !options[:width].positive?
-      raise OptionParser::InvalidArgument, "unknown theme" unless Output::THEMES.key?(options[:theme])
+      raise OptionParser::InvalidArgument, "unknown theme" if options[:theme] && !Output::THEMES.key?(options[:theme])
 
       parts = []
       error_found = false
@@ -68,22 +68,9 @@ module MermaidTerm
 
     def fitted_render(document, options, stdout, stderr)
       width = options[:width] || (stdout.tty? ? terminal_width : nil)
-      presets = [
-        {}, { node_gap: 1, rank_gap: 1 }, { node_gap: 1, rank_gap: 1, node_padding_x: 1 },
-        { node_gap: 1, rank_gap: 1, node_padding_x: 1, max_label_width: 16 },
-        { node_gap: 1, rank_gap: 1, node_padding_x: 1, max_label_width: 12 }
-      ]
-      presets = [presets.last] if options[:compact]
-      presets = [presets.first] unless width && options[:fit]
-      if options[:fit] == :rotate && document.type == :flowchart && document.ast.direction == :LR
-        presets << presets.last.merge(direction: :TB)
-      end
-      rendered = nil
-      presets.each do |preset|
-        rendered = document.render(**preset, charset: options[:charset], color: options[:color], theme: options[:theme],
-                                   rounded: options[:rounded], crossings: options[:crossings])
-        break unless width && rendered.lines.any? { |line| MermaidTerm::Text.width(line.gsub(/\e\[[\d;]*m/, "")) > width }
-      end
+      rendered = document.render(width: width, fit: options[:fit], compact: options[:compact],
+                                 charset: options[:charset], color: options[:color], theme: options[:theme],
+                                 rounded: options[:rounded], crossings: options[:crossings])
       if width && rendered.lines.any? { |line| MermaidTerm::Text.width(line.gsub(/\e\[[\d;]*m/, "")) > width }
         actual = rendered.lines.map { |line| MermaidTerm::Text.width(line.gsub(/\e\[[\d;]*m/, "")) }.max
         stderr.puts "diagram width #{actual} exceeds target #{width}"

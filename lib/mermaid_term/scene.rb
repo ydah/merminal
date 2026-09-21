@@ -21,5 +21,17 @@ module MermaidTerm
 
     LIGHT = Stroke.new(weight: :light, pattern: :solid)
     LAYERS = { background: 0, container: 1, edge: 2, node: 3, marker: 4, label: 5 }.freeze
+
+    def self.translate(item, dx: 0, dy: 0)
+      case item
+      in Box | Fill
+        rect = item.rect
+        item.with(rect: rect.with(x: rect.x + dx, y: rect.y + dy))
+      in Polyline
+        item.with(points: item.points.map { |x, y| [x + dx, y + dy] })
+      in Text | Marker | Glyph
+        item.with(x: item.x + dx, y: item.y + dy)
+      end
+    end
   end
 end

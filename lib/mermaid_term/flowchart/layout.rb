@@ -62,7 +62,7 @@ module MermaidTerm::Flowchart
         @oriented.each do |edge, from, to, _|
           next unless from == id && to != id
 
-          @ranks[to] = [@ranks[to], @ranks[id] + [edge.minlen, edge.label ? 2 : 1].max].max
+          @ranks[to] = [@ranks[to], @ranks[id] + edge.minlen].max
           indegree[to] -= 1
           queue << to if indegree[to].zero?
         end
@@ -95,15 +95,17 @@ module MermaidTerm::Flowchart
       end
       @sizes = @ast.nodes.to_h do |node|
         width = @labels[node.id].map { |line| MermaidTerm::Text.width(line, ambiguous_width: @ambiguous_width) }.max.to_i + @padding * 2 + 2
-        width += 2 if %i[circle double_circle decision hexagon].include?(node.shape)
-        [node.id, [width, @labels[node.id].length + 2]]
+        width += 2 if %i[circle double_circle decision hexagon subroutine].include?(node.shape)
+        height = @labels[node.id].length + 2 + (node.shape == :database ? 1 : 0)
+        [node.id, [width, height]]
       end
       @positions = {}
       ranks = @groups.keys.sort
-      cursor = 1
+      cursor = 3
       ranks.each do |rank|
         channel_edges = @oriented.count { |_, from, to, _| @ranks[from] == rank - 1 && @ranks[to] == rank }
-        extra = @horizontal ? @oriented.filter_map { |edge, from, to, _| Text.width(edge.label.to_s) if @ranks[from] == rank - 1 && @ranks[to] == rank }.max.to_i : channel_edges * 2
+        label_width = @oriented.filter_map { |edge, from, to, _| Text.width(edge.label.to_s) if @ranks[from] == rank - 1 && @ranks[to] == rank }.max.to_i
+        extra = [channel_edges * 2, @horizontal ? label_width : 0].max
         cursor += [@rank_gap, extra + 2].max if rank.positive?
         order = 1
         @groups[rank].each do |node|
@@ -117,7 +119,13 @@ module MermaidTerm::Flowchart
       @height = @positions.map { |id, (_, y)| y + @sizes[id][1] }.max + 2
       @outer_track = @horizontal ? @height + 2 : @width + 2
       long_edges = @oriented.count { |_, from, to, _| (@ranks[to] - @ranks[from]).abs != 1 }
-      @horizontal ? @height += long_edges * 2 + 5 : @width += long_edges * 2 + 5
+      if @horizontal
+        @height += long_edges * 2 + 5
+      else
+        long_label = @oriented.filter_map { |edge, from, to, _| Text.width(edge.label.to_s) if @ranks[to] - @ranks[from] != 1 }.max.to_i
+        @width += long_edges * 2 + long_label + 5
+      end
+      @width += @ast.edges.map { |edge| Text.width(edge.label.to_s, ambiguous_width: @ambiguous_width) }.max.to_i + 2
     end
 
     def draw_nodes
@@ -125,11 +133,18 @@ module MermaidTerm::Flowchart
         x, y = @positions.fetch(node.id)
         w, h = @sizes.fetch(node.id)
         corners = %i[rounded stadium circle double_circle].include?(node.shape) ? :rounded : :sharp
-        @items << Scene::Box.new(rect: Scene::Rect.new(x: x, y: y, width: w, height: h), stroke: Scene::LIGHT,
-                                 corners: corners, role: :node_border, layer: :node)
+        style = @ast.styles[node.id] || node.classes.reverse.filter_map { |name| @ast.styles["class:#{name}"] }.first
+        fill = css_color(style, "fill")
+        border = css_color(style, "stroke")
+        foreground = css_color(style, "color")
+        rect = Scene::Rect.new(x: x, y: y, width: w, height: h)
+        @items << Scene::Fill.new(rect: rect, role: :"bg:#{fill}", layer: :background) if fill
+        @items << Scene::Box.new(rect: rect, stroke: Scene::LIGHT,
+                                 corners: corners, role: border ? :"fg:#{border}" : :node_border, layer: :node)
         @labels[node.id].each_with_index do |line, index|
           offset = (w - Text.width(line, ambiguous_width: @ambiguous_width)) / 2
-          @items << Scene::Text.new(x: x + offset, y: y + 1 + index, string: line, role: :node_text,
+          text_y = y + 1 + index + (node.shape == :database ? 1 : 0)
+          @items << Scene::Text.new(x: x + offset, y: text_y, string: line, role: foreground ? :"fg:#{foreground}" : :node_text,
                                     layer: :label, emphasis: nil)
         end
         decorate(node, x, y, w, h)
@@ -149,6 +164,17 @@ module MermaidTerm::Flowchart
         @items << Scene::Polyline.new(points: [[x + w - 3, y], [x + w - 3, y + h - 1]], stroke: Scene::LIGHT, role: :node_border, layer: :node)
       when :database
         @items << Scene::Polyline.new(points: [[x, y + 1], [x + w - 1, y + 1]], stroke: Scene::LIGHT, role: :node_border, layer: :node)
+      when :double_circle
+        @items << Scene::Glyph.new(x: x + 1, y: y + h / 2, char: "(", role: :node_border, layer: :marker)
+        @items << Scene::Glyph.new(x: x + w - 2, y: y + h / 2, char: ")", role: :node_border, layer: :marker)
+      when :parallelogram
+        @items << Scene::Glyph.new(x: x, y: y + h / 2, char: "/", role: :node_border, layer: :marker)
+        @items << Scene::Glyph.new(x: x + w - 1, y: y + h / 2, char: "/", role: :node_border, layer: :marker)
+      when :trapezoid
+        @items << Scene::Glyph.new(x: x, y: y + h / 2, char: "/", role: :node_border, layer: :marker)
+        @items << Scene::Glyph.new(x: x + w - 1, y: y + h / 2, char: "\\", role: :node_border, layer: :marker)
+      when :flag
+        @items << Scene::Glyph.new(x: x, y: y + h / 2, char: ">", role: :node_border, layer: :marker)
       end
     end
 
@@ -168,7 +194,9 @@ module MermaidTerm::Flowchart
         end
         stroke = Scene::Stroke.new(weight: edge.stroke == :heavy ? :heavy : :light,
                                    pattern: edge.stroke == :dotted ? :dotted : :solid)
-        @items << Scene::Polyline.new(points: points, stroke: stroke, role: :edge, layer: :edge)
+        style = @ast.styles["link:#{edge.id}"] || @ast.styles["link:default"]
+        color = css_color(style, "stroke")
+        @items << Scene::Polyline.new(points: points, stroke: stroke, role: color ? :"fg:#{color}" : :edge, layer: :edge)
         marker_endpoint(edge, points, reversed)
         label_edge(edge, points) if edge.label && !edge.label.empty?
       end
@@ -193,44 +221,42 @@ module MermaidTerm::Flowchart
     end
 
     def outer_route(from, to, index)
+      # ponytail: long and cyclic edges use outside lanes; add channel segments if dense graphs need tighter layouts.
       a = port(from)
       b = port(to, end_port: true)
       track = @outer_track + index * 2
       if @horizontal
-        [a, [a[0] + 2, a[1]], [a[0] + 2, track], [b[0] - 2, track], [b[0] - 2, b[1]], b]
+        turn = @groups[@ranks[from]].map { |node| @positions[node.id][0] + @sizes[node.id][0] }.max + 1
+        [a, [turn, a[1]], [turn, track], [b[0] - 2, track], [b[0] - 2, b[1]], b]
       else
-        [a, [a[0], a[1] + 2], [track, a[1] + 2], [track, b[1] - 2], [b[0], b[1] - 2], b]
+        turn = @groups[@ranks[from]].map { |node| @positions[node.id][1] + @sizes[node.id][1] }.max + 1
+        [a, [a[0], turn], [track, turn], [track, b[1] - 2], [b[0], b[1] - 2], b]
       end
     end
 
     def marker_endpoint(edge, points, reversed)
-      kind = reversed ? edge.end_marker : edge.end_marker
+      forward = @horizontal ? :e : :s
+      backward = @horizontal ? :w : :n
+      put_marker(reversed ? points.first : points.last, edge.end_marker, reversed ? backward : forward)
+      put_marker(reversed ? points.last : points.first, edge.start_marker, reversed ? forward : backward)
+    end
+
+    def put_marker(tip, kind, direction)
       return unless kind
 
-      tip = reversed ? points.first : points.last
-      neighbor = reversed ? points[1] : points[-2]
-      direction = if @horizontal
-                    reversed ? :w : :e
-                  else
-                    reversed ? :n : :s
-                  end
       x = tip[0] + (direction == :e ? -1 : direction == :w ? 1 : 0)
       y = tip[1] + (direction == :s ? -1 : direction == :n ? 1 : 0)
       @items << Scene::Marker.new(x: x, y: y, kind: kind, direction: direction, role: :marker, layer: :marker)
-      return unless edge.start_marker
-
-      @items << Scene::Marker.new(x: neighbor[0], y: neighbor[1], kind: edge.start_marker,
-                                  direction: direction == :e ? :w : direction == :s ? :n : :e,
-                                  role: :marker, layer: :marker)
     end
 
     def label_edge(edge, points)
       text = edge.label.to_s
-      a, b = points[0], points[-1]
-      x, y = if @horizontal
-               [a[0] + 1, [a[1], b[1]].min - 1]
+      x, y = if points.length > 4
+               @horizontal ? [points[1][0], points[2][1] - 1] : [points[2][0] + 1, points[1][1] - 1]
+             elsif @horizontal
+               [points[1][0], [points[0][1], points[-1][1]].min - 1]
              else
-               [[a[0], b[0]].min, [a[1], b[1]].min + 1]
+               [[points[0][0], points[-1][0]].max + 2, points[1][1] - 1]
              end
       x = [[x, 0].max, @width - Text.width(text, ambiguous_width: @ambiguous_width)].min
       y = [[y, 0].max, @height - 1].min
@@ -275,6 +301,10 @@ module MermaidTerm::Flowchart
         else item
         end
       end
+    end
+
+    def css_color(style, property)
+      style.to_s[/\b#{property}\s*:\s*(\#(?:[\da-fA-F]{3}|[\da-fA-F]{6}))\b/, 1]
     end
   end
 end

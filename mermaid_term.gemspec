@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.description = "A pure Ruby Mermaid diagram renderer for Unicode and ASCII terminals."
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.3"
-  spec.files = Dir.glob("{lib,exe,docs}/**/*", File::FNM_DOTMATCH).select { |path| File.file?(path) } + %w[README.md LICENSE.txt CHANGELOG.md]
+  spec.files = Dir.glob("{lib,exe,docs,sig}/**/*", File::FNM_DOTMATCH).select { |path| File.file?(path) } + %w[README.md LICENSE.txt CHANGELOG.md]
   spec.bindir = "exe"
   spec.executables = %w[mmterm]
   spec.require_paths = %w[lib]

@@ -1,0 +1,52 @@
+module MermaidTerm
+  VERSION: String
+
+  def self.render: (String source, **untyped options) -> String
+  def self.parse: (String source, ?strict: bool) -> Document
+  def self.markdown_blocks: (String markdown) -> Array[MarkdownBlock]
+  def self.diagram_types: () -> Array[Symbol]
+  def self.register: (untyped plugin) -> untyped
+
+  class Error < StandardError
+  end
+
+  class SyntaxError < Error
+  end
+
+  class UnsupportedDiagramError < Error
+  end
+
+  class Document
+    def type: () -> Symbol
+    def diagnostics: () -> Array[Diagnostic]
+    def scene: (**untyped options) -> Scene
+    def render: (**untyped options) -> String
+  end
+
+  class Diagnostic
+    def severity: () -> Symbol
+    def message: () -> String
+    def line: () -> Integer
+    def column: () -> Integer
+    def format: (?String path, ?String source) -> String
+  end
+
+  class MarkdownBlock
+    def line: () -> Integer
+    def source: () -> String
+    def render: (**untyped options) -> String
+  end
+
+  class Scene
+    def width: () -> Integer
+    def height: () -> Integer
+    def items: () -> Array[untyped]
+  end
+
+  module Text
+    def self.width: (String string, ?ambiguous_width: Integer) -> Integer
+    def self.wrap: (String string, Integer max_width, ?ambiguous_width: Integer) -> Array[String]
+    def self.truncate: (String string, Integer max_width, ?omission: String, ?ambiguous_width: Integer) -> String
+    def self.pad: (String string, Integer target_width, ?align: Symbol, ?ambiguous_width: Integer) -> String
+  end
+end

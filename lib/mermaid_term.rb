@@ -8,6 +8,14 @@ require_relative "mermaid_term/scene"
 require_relative "mermaid_term/raster"
 require_relative "mermaid_term/output"
 require_relative "mermaid_term/flowchart"
+require_relative "mermaid_term/diagrams/base"
+require_relative "mermaid_term/diagrams/pie"
+require_relative "mermaid_term/diagrams/timeline"
+require_relative "mermaid_term/diagrams/mindmap"
+require_relative "mermaid_term/diagrams/xychart"
+require_relative "mermaid_term/diagrams/gantt"
+require_relative "mermaid_term/diagrams/sequence"
+require_relative "mermaid_term/diagrams/structure"
 
 # Pure Ruby terminal renderer for a documented subset of Mermaid.
 module MermaidTerm
@@ -55,17 +63,52 @@ module MermaidTerm
   # Parsed document; the Scene can be rendered with different options.
   Document = Data.define(:type, :ast, :diagnostics, :source, :plugin) do
     def scene(**options)
-      plugin.layout(ast, **options)
+      picture = plugin.layout(ast, **options)
+      return picture unless source.title
+
+      title = Scene::Text.new(x: 0, y: 0, string: source.title, role: :emphasis, layer: :label, emphasis: nil)
+      Scene.new(width: [picture.width, Text.width(source.title)].max, height: picture.height + 1,
+                items: ([title] + picture.items.map { |item| Scene.translate(item, dy: 1) }).freeze)
     end
 
-    def render(**options)
+    def render(width: nil, fit: :compact, compact: false, **options)
+      unless width && fit
+        preset = compact ? { node_gap: 1, rank_gap: 1, node_padding_x: 1, max_label_width: 12 } : {}
+        return render_once(**options, **preset)
+      end
+
+      raise ArgumentError, "width must be positive" unless width.positive?
+
+      presets = [
+        {}, { node_gap: 1, rank_gap: 1 }, { node_gap: 1, rank_gap: 1, node_padding_x: 1 },
+        { node_gap: 1, rank_gap: 1, node_padding_x: 1, max_label_width: 16 },
+        { node_gap: 1, rank_gap: 1, node_padding_x: 1, max_label_width: 12 }
+      ]
+      presets = [presets.last] if compact
+      presets << presets.last.merge(direction: :TB) if fit == :rotate && type == :flowchart && ast.direction == :LR
+      rendered = nil
+      presets.each do |preset|
+        rendered = render_once(**options, **preset)
+        break if rendered.lines.all? { |line| Text.width(line.gsub(/\e\[[\d;]*m/, "")) <= width }
+      end
+      rendered
+    end
+
+    def render_once(**options)
       charset = options.fetch(:charset, :unicode)
       picture = scene(**options)
       grid = Raster.rasterize(picture, charset: charset, rounded: options.fetch(:rounded, true),
-                             ambiguous_width: options.fetch(:ambiguous_width, 1))
-      Output.render(grid, charset: charset, color: options.fetch(:color, false), theme: options.fetch(:theme, :default))
+                             ambiguous_width: options.fetch(:ambiguous_width, 1), crossings: options.fetch(:crossings, :plain))
+      theme = options[:theme] || source.directives.fetch("theme", :default)
+      theme = :default unless theme.respond_to?(:to_sym) && Output::THEMES.key?(theme.to_sym)
+      Output.render(grid, charset: charset, color: options.fetch(:color, false), theme: theme)
     end
   end
 end
 
 MermaidTerm.register(MermaidTerm::Flowchart)
+[
+  MermaidTerm::Diagrams::Sequence, MermaidTerm::Diagrams::State, MermaidTerm::Diagrams::ClassDiagram,
+  MermaidTerm::Diagrams::ER, MermaidTerm::Diagrams::Pie, MermaidTerm::Diagrams::XYChart,
+  MermaidTerm::Diagrams::Gantt, MermaidTerm::Diagrams::Timeline, MermaidTerm::Diagrams::Mindmap
+].each { |plugin| MermaidTerm.register(plugin) }
