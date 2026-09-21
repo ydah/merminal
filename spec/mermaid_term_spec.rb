@@ -4,6 +4,13 @@ require "spec_helper"
 require "open3"
 
 RSpec.describe MermaidTerm do
+  it "reproduces property runs from a seed" do
+    observed = []
+    property(runs: 3, seed: 42) { |rng, _| observed << rng.rand(100) }
+    expected_rng = Random.new(Integer(ENV.fetch("SEED", 42)))
+    expect(observed).to eq(Array.new(3) { expected_rng.rand(100) })
+  end
+
   it "measures CJK, combining marks and ambiguous characters in cells" do
     expect(MermaidTerm::Text.width("日本語abc")).to eq(9)
     expect(MermaidTerm::Text.width("e\u0301")).to eq(1)
@@ -47,6 +54,16 @@ RSpec.describe MermaidTerm do
     ]
     grid = MermaidTerm::Raster.rasterize(scene.new(width: 8, height: 3, items: items))
     expect(MermaidTerm::Output.render(grid)).to include("┬", "日")
+  end
+
+  it "renders the hand-built Scene demo in both charsets" do
+    demo = File.expand_path("../examples/scene_demo.rb", __dir__)
+    { unicode: [], ascii: ["--ascii"] }.each do |charset, arguments|
+      output, errors, status = Open3.capture3(RbConfig.ruby, demo, *arguments)
+      expect(status.exitstatus).to eq(0)
+      expect(errors).to be_empty
+      expect(output).to match_snapshot("scene_demo_#{charset}")
+    end
   end
 
   it "separates independent edge crossings in bridge mode" do
@@ -130,48 +147,57 @@ RSpec.describe MermaidTerm do
     end
   end
 
+  it "keeps wide first sequence participants inside the Scene" do
+    source = "sequenceDiagram\nparticipant A as A very long first participant\nA->>B: Hello\n"
+    expect { described_class.render(source) }.not_to raise_error
+  end
+
   it "keeps randomly generated flowcharts inside their Scenes" do
-    rng = Random.new(20_260_921)
-    500.times do
+    property(runs: 500, seed: 20_260_921) do |rng, record|
       count = rng.rand(1..12)
       edges = Array.new(rng.rand(0..20)) do
         from, to = rng.rand(count), rng.rand(count)
         rng.rand(4).zero? ? "N#{from} -->|yes| N#{to}" : "N#{from} --> N#{to}"
       end
       source = "graph #{%w[TB BT LR RL].sample(random: rng)}\n" + edges.join("\n")
-      document = described_class.parse(source)
-      next if document.ast.nodes.empty?
+      record.call(source)
+      assert_flowchart_properties(source)
+    end
+  end
 
-      scene = document.scene
-      output = document.render
-      expect(output.lines.map { |line| MermaidTerm::Text.width(line.chomp) }.max).to be <= scene.width
-      expect(output).to eq(document.render)
-      boxes = scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :node_border }.map(&:rect)
-      boxes.combination(2).each do |a, b|
-        expect(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y).to be(true)
-      end
-      scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }.each do |edge|
-        [edge.points.first, edge.points.last].each do |x, y|
-          expect(boxes.any? do |box|
-            x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height &&
-              (x == box.x || x == box.x + box.width - 1 || y == box.y || y == box.y + box.height - 1)
-          end).to be(true)
+  it "keeps every flowchart fixture inside its Scene" do
+    paths = Dir.glob(File.expand_path("fixtures/{flowchart*,subgraph*}/**/*.mmd", __dir__))
+    paths << File.expand_path("fixtures/flowchart.mmd", __dir__)
+    expect(paths.length).to be >= 40
+    paths.each { |path| assert_flowchart_properties(File.read(path)) }
+  end
+
+  it "contains nested subgraphs without crossing their sibling frames" do
+    Dir.glob(File.expand_path("fixtures/subgraph_cases/*.mmd", __dir__)).each do |path|
+      document = described_class.parse(File.read(path))
+      groups = document.ast.subgraphs
+      frames = document.scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :container_border }.map(&:rect)
+      nodes = document.ast.nodes.map(&:id).zip(document.scene.items.grep(MermaidTerm::Scene::Box)
+                                  .select { |item| item.role == :node_border }.map(&:rect)).to_h
+      expect(frames.length).to eq(groups.length)
+      groups.zip(frames).each do |group, frame|
+        group.node_ids.uniq.each do |id|
+          node = nodes.fetch(id)
+          expect(frame.x <= node.x && frame.y <= node.y &&
+                 frame.x + frame.width >= node.x + node.width &&
+                 frame.y + frame.height >= node.y + node.height).to be(true)
         end
-        edge.points.each_cons(2) do |(x1, y1), (x2, y2)|
-          distance = [(x2 - x1).abs, (y2 - y1).abs].max
-          (0..distance).each do |step|
-            x = x1 + (x2 <=> x1) * step
-            y = y1 + (y2 <=> y1) * step
-            expect(boxes.none? { |box| x > box.x && x < box.x + box.width - 1 && y > box.y && y < box.y + box.height - 1 }).to be(true)
-          end
+      end
+      frames.combination(2).each do |a, b|
+        disjoint = a.x + a.width <= b.x || b.x + b.width <= a.x ||
+                   a.y + a.height <= b.y || b.y + b.height <= a.y
+        contains = lambda do |outer, inner|
+          outer.x <= inner.x && outer.y <= inner.y &&
+            outer.x + outer.width >= inner.x + inner.width &&
+            outer.y + outer.height >= inner.y + inner.height
         end
+        expect(disjoint || contains.call(a, b) || contains.call(b, a)).to be(true)
       end
-      scene.items.grep(MermaidTerm::Scene::Text).select { |item| item.role == :edge_label }.each do |label|
-        right = label.x + MermaidTerm::Text.width(label.string)
-        expect(boxes.none? { |box| label.y >= box.y && label.y < box.y + box.height && right > box.x && label.x < box.x + box.width }).to be(true)
-      end
-      document.ast.nodes.each { |node| expect(output).to include(node.label) }
-      expect(document.render(charset: :ascii)).to match(/\A[\x20-\x7e\n]*\z/)
     end
   end
 
@@ -186,11 +212,68 @@ RSpec.describe MermaidTerm do
     end
   end
 
+  it "survives truncated and mutated diagrams" do
+    rng = Random.new(5_503)
+    Dir.glob(File.expand_path("fixtures/*.mmd", __dir__)).each do |path|
+      source = File.read(path)
+      50.times do
+        truncated = source.byteslice(0, rng.rand(source.bytesize))
+        mutated = source.dup
+        mutated[rng.rand(mutated.length)] = ["@", "}", "[", "\n"].sample(random: rng)
+        [truncated, mutated].each do |input|
+          begin
+            described_class.render(input)
+          rescue MermaidTerm::UnsupportedDiagramError, MermaidTerm::SyntaxError
+            nil
+          rescue RangeError => error
+            raise "#{path}: #{input.inspect}: #{error.message}"
+          end
+        end
+      end
+    end
+  end
+
   it "matches the reviewed Unicode gallery snapshots" do
     Dir.glob(File.expand_path("fixtures/**/*.mmd", __dir__)).each do |path|
       document = described_class.parse(File.read(path))
       expect(document.diagnostics.select { |diagnostic| diagnostic.severity == :error }).to be_empty
       expect(document.render).to match_snapshot(File.basename(path, ".mmd"))
     end
+  end
+
+  def assert_flowchart_properties(source)
+    document = described_class.parse(source)
+    return if document.ast.nodes.empty?
+
+    scene = document.scene
+    output = document.render
+    expect(output.lines.map { |line| MermaidTerm::Text.width(line.chomp) }.max).to be <= scene.width
+    expect(output).to eq(document.render)
+    boxes = scene.items.grep(MermaidTerm::Scene::Box).select { |item| item.role == :node_border }.map(&:rect)
+    boxes.combination(2).each do |a, b|
+      expect(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y).to be(true)
+    end
+    scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }.each do |edge|
+      [edge.points.first, edge.points.last].each do |x, y|
+        expect(boxes.any? do |box|
+          x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height &&
+            (x == box.x || x == box.x + box.width - 1 || y == box.y || y == box.y + box.height - 1)
+        end).to be(true)
+      end
+      edge.points.each_cons(2) do |(x1, y1), (x2, y2)|
+        distance = [(x2 - x1).abs, (y2 - y1).abs].max
+        (0..distance).each do |step|
+          x = x1 + (x2 <=> x1) * step
+          y = y1 + (y2 <=> y1) * step
+          expect(boxes.none? { |box| x > box.x && x < box.x + box.width - 1 && y > box.y && y < box.y + box.height - 1 }).to be(true)
+        end
+      end
+    end
+    scene.items.grep(MermaidTerm::Scene::Text).select { |item| item.role == :edge_label }.each do |label|
+      right = label.x + MermaidTerm::Text.width(label.string)
+      expect(boxes.none? { |box| label.y >= box.y && label.y < box.y + box.height && right > box.x && label.x < box.x + box.width }).to be(true)
+    end
+    document.ast.nodes.each { |node| expect(output).to include(node.label) }
+    expect(document.render(charset: :ascii)).to match(/\A[\x20-\x7e\n]*\z/)
   end
 end

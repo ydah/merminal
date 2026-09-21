@@ -85,7 +85,8 @@ module MermaidTerm::Diagrams
       end
       left_note = ast.events.select { |event| event.kind == :note && event.extra == "left of" && event.from == ids.first }
       left_margin = left_note.map { |event| Text.width(event.text) + 4 }.max.to_i
-      centers = [5 + left_margin]
+      first_width = Text.width(ast.participants.first.label) + 4
+      centers = [[5 + left_margin, first_width / 2 + 1].max]
       gaps.each { |gap| centers << centers[-1] + gap }
       columns = ids.zip(centers).to_h
       rows = []

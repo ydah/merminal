@@ -193,6 +193,7 @@ module MermaidTerm::Diagrams
       graph = Structure.new
       findings = []
       bodies = Hash.new { |hash, key| hash[key] = [] }
+      annotations = {}
       current = nil
       source.lines.drop(1).each_with_index do |line, index|
         statement = line.strip
@@ -208,6 +209,10 @@ module MermaidTerm::Diagrams
         when /\Aclass\s+([\w.-]+)\s*\{\z/
           current = Regexp.last_match(1)
           graph.node(current)
+        when /\A(?:class\s+)?([\w.-]+)\s+<<([\w.-]+)>>\z/
+          id, annotation = Regexp.last_match.captures
+          graph.node(id)
+          annotations[id] = annotation
         when /\Aclass\s+([\w.-]+)\z/
           graph.node(Regexp.last_match(1))
         when /\A([\w.-]+)\s*:\s*(.+)\z/
@@ -219,7 +224,7 @@ module MermaidTerm::Diagrams
           from, to = relation.start_with?("<") || relation.start_with?("*") || relation.start_with?("o") ? [right, left] : [left, right]
           graph.edge(from, to, label: label, stroke: relation.include?(".") ? :dotted : :light, marker: marker, line: index + 2)
           graph.styles["mult:#{graph.edges.length - 1}"] = from == left ? [left_mult, right_mult] : [right_mult, left_mult]
-        when /\A[\w.-]+\s+<<.+>>\z/, ""
+        when ""
           next
         else
           findings << MermaidTerm::Diagrams.finding("unrecognized class statement", source, index + 1)
@@ -228,10 +233,10 @@ module MermaidTerm::Diagrams
       findings << MermaidTerm::Diagrams.finding("unclosed class body", source, source.lines.length - 1) if current
       graph.nodes.each do |id, node|
         body = bodies[id]
-        next if body.empty?
-
         attributes, operations = body.partition { |item| !item.include?("(") }
-        graph.node(id, label: ([node.label, ""] + attributes + (operations.empty? ? [] : [""] + operations)).join("\n"), shape: :rectangle)
+        name = annotations[id] ? "<<#{annotations[id]}>>\n#{id}" : node.label
+        graph.node(id, label: ([name, ""] + (attributes.empty? ? [" "] : attributes) +
+                               [""] + (operations.empty? ? [" "] : operations)).join("\n"), shape: :rectangle)
       end
       [graph.diagram, findings]
     end
@@ -241,8 +246,12 @@ module MermaidTerm::Diagrams
       boxes = scene.items.grep(Scene::Box).select { |item| item.role == :node_border }
       dividers = ast.nodes.zip(boxes).flat_map do |node, box|
         rect = box.rect
-        node.label.split("\n", -1).each_with_index.filter_map do |line, index|
-          next unless line.empty?
+        rows = node.label.split("\n", -1).flat_map do |line|
+          line.empty? ? [true] : Text.wrap(line, options.fetch(:max_label_width, 24),
+                                                  ambiguous_width: options.fetch(:ambiguous_width, 1)).map { false }
+        end
+        rows.each_with_index.filter_map do |divider, index|
+          next unless divider
 
           y = rect.y + index + 1
           Scene::Polyline.new(points: [[rect.x, y], [rect.x + rect.width - 1, y]],
