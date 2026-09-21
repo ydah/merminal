@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "mermaid_term/version"
+require_relative "mermaid_term/shareable"
 require_relative "mermaid_term/text"
 require_relative "mermaid_term/source"
 require_relative "mermaid_term/markdown"
@@ -36,14 +37,14 @@ module MermaidTerm
 
     # Parse a Mermaid document and collect recoverable diagnostics.
     def parse(input, strict: false)
-      source = Ractor.make_shareable(Source.parse(input))
+      source = Shareable.make(Source.parse(input))
       keyword = source.lines.first.to_s.lstrip[/\A[^\s;]+/]
       plugin = @plugins.find { |candidate| candidate.keywords.include?(keyword) }
       raise UnsupportedDiagramError, "unsupported diagram: #{keyword || '(empty)'}" unless plugin
 
       ast, findings = plugin.parse(source)
-      ast = Ractor.make_shareable(ast)
-      diagnostics = Ractor.make_shareable(source.diagnostics + findings)
+      ast = Shareable.make(ast)
+      diagnostics = Shareable.make(source.diagnostics + findings)
       raise SyntaxError, diagnostics.select { |d| d.severity == :error }.map(&:message).join("; ") if strict && diagnostics.any? { |d| d.severity == :error }
 
       Document.new(type: plugin.diagram_type, ast: ast, diagnostics: diagnostics, source: source, plugin: plugin)
@@ -65,10 +66,10 @@ module MermaidTerm
   Document = Data.define(:type, :ast, :diagnostics, :source, :plugin) do
     def scene(**options)
       picture = plugin.layout(ast, **options)
-      return Ractor.make_shareable(picture) unless source.title
+      return Shareable.make(picture) unless source.title
 
       title = Scene::Text.new(x: 0, y: 0, string: source.title, role: :emphasis, layer: :label, emphasis: nil)
-      Ractor.make_shareable(Scene.new(width: [picture.width, Text.width(source.title)].max, height: picture.height + 1,
+      Shareable.make(Scene.new(width: [picture.width, Text.width(source.title)].max, height: picture.height + 1,
                                        items: ([title] + picture.items.map { |item| Scene.translate(item, dy: 1) }).freeze))
     end
 

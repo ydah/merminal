@@ -3,7 +3,7 @@
 module MermaidTerm
   # Plain and ANSI terminal output.
   module Output
-    THEMES = Ractor.make_shareable({
+    THEMES = Shareable.make({
       default: { node_border: 39, node_text: 255, edge: 110, edge_label: 222, marker: 203,
                  container_border: 103, container_title: 222, axis: 244, axis_label: 250,
                  series_1: 39, series_2: 203, emphasis: 229, muted: 244 },
@@ -13,7 +13,7 @@ module MermaidTerm
       solarized: { node_border: 37, node_text: 230, edge: 66, edge_label: 136, marker: 160,
                    axis: 244, axis_label: 187, series_1: 37, series_2: 166, emphasis: 230 }
     })
-    BASIC = Ractor.make_shareable([[0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
+    BASIC = Shareable.make([[0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
                                     [0, 0, 128], [128, 0, 128], [0, 128, 128], [192, 192, 192],
                                     [128, 128, 128], [255, 0, 0], [0, 255, 0], [255, 255, 0],
                                     [0, 0, 255], [255, 0, 255], [0, 255, 255], [255, 255, 255]])

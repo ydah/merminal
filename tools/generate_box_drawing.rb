@@ -30,5 +30,5 @@ end
 light = table.keys.count { |key| key.chars.all? { |char| %w[0 1].include?(char) } }
 abort "incomplete light table: #{light}/15" unless light == 15
 output = +"# frozen_string_literal: true\n# Unicode 17.0.0; generated from UnicodeData.txt.\n\nmodule MermaidTerm::Raster\n"
-output << "  BOX_DRAWING = Ractor.make_shareable(#{table.sort.to_h.inspect})\nend\n"
+output << "  BOX_DRAWING = MermaidTerm::Shareable.make(#{table.sort.to_h.inspect})\nend\n"
 File.write(File.expand_path("../lib/mermaid_term/raster/box_drawing_table.rb", __dir__), output)

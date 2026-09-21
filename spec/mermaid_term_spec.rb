@@ -314,6 +314,8 @@ RSpec.describe MermaidTerm do
   end
 
   it "returns shareable parsed graphs and Scenes" do
+    skip "Ractor unavailable" unless defined?(Ractor)
+
     document = described_class.parse("graph LR\nA-->B")
     expect(Ractor.shareable?(document.ast)).to be(true)
     expect(Ractor.shareable?(document.scene)).to be(true)

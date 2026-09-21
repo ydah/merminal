@@ -39,6 +39,6 @@ end
 
 version = File.foreach(eaw).first(5).join[/EastAsianWidth-(\d+\.\d+\.\d+)/, 1] || "unknown"
 output = "# frozen_string_literal: true\n# Unicode #{version}; generated from UCD files.\n\nmodule MermaidTerm::Text\n"
-ranges.each { |name, value| output << "  #{name.to_s.upcase} = Ractor.make_shareable(#{merge(value).inspect})\n" }
+ranges.each { |name, value| output << "  #{name.to_s.upcase} = MermaidTerm::Shareable.make(#{merge(value).inspect})\n" }
 output << "end\n"
 File.write(File.expand_path("../lib/mermaid_term/text/east_asian_width_table.rb", __dir__), output)
