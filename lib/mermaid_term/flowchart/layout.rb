@@ -33,6 +33,7 @@ module MermaidTerm::Flowchart
       draw_nodes
       draw_edges
       add_subgraphs
+      avoid_unrelated_groups
       clip_group_edges
       draw_markers
       flip_items if @reverse
@@ -79,8 +80,6 @@ module MermaidTerm::Flowchart
 
     def order_nodes
       @groups = @ast.nodes.group_by { |node| @ranks[node.id] }
-      # ponytail: source order keeps cluster members together; add block median sweeps if crossings become a problem.
-      return if @ast.subgraphs.any?
 
       best = @groups.transform_values(&:dup)
       best_crossings = crossing_count
@@ -105,7 +104,7 @@ module MermaidTerm::Flowchart
             median = neighbors.empty? ? nil : (neighbors[(neighbors.length - 1) / 2] + neighbors[neighbors.length / 2]) / 2.0
             [node.id, median]
           end
-          @groups[rank] = @groups[rank].each_with_index.sort_by { |node, index| [scores[node.id] || index, index] }.map(&:first)
+          @groups[rank] = sort_clustered(@groups[rank], scores)
         end
         count = crossing_count
         if count < best_crossings
@@ -118,6 +117,28 @@ module MermaidTerm::Flowchart
         end
       end
       @groups = best
+    end
+
+    def sort_clustered(nodes, scores, parent = nil, seen = [])
+      children = @ast.subgraphs.select { |group| group.parent == parent && !seen.include?(group.id) }
+      blocks = []
+      nodes.each do |node|
+        group = children.find { |candidate| candidate.node_ids.include?(node.id) }
+        block = group && blocks.find { |entry| entry[:group] == group.id }
+        if block
+          block[:nodes] << node
+        else
+          blocks << { group: group&.id, nodes: [node], index: blocks.length }
+        end
+      end
+      blocks.sort_by! do |block|
+        values = block[:nodes].filter_map { |node| scores[node.id] }.sort
+        median = values.empty? ? block[:index] : (values[(values.length - 1) / 2] + values[values.length / 2]) / 2.0
+        [median, block[:index]]
+      end
+      blocks.flat_map do |block|
+        block[:group] ? sort_clustered(block[:nodes], scores, block[:group], seen + [block[:group]]) : block[:nodes]
+      end
     end
 
     def crossing_count
@@ -166,13 +187,15 @@ module MermaidTerm::Flowchart
         [node.id, [width, height]]
       end
       @positions = {}
+      order_positions = @ast.subgraphs.empty? ? nil : group_band_positions
       ranks = @groups.keys.sort
       cursor = 3 + @cluster_margin
       ranks.each do |rank|
         order = 1 + @cluster_margin
         @groups[rank].each do |node|
           width, height = @sizes.fetch(node.id)
-          @positions[node.id] = @horizontal ? [cursor, order] : [order, cursor]
+          node_order = order_positions ? order_positions.fetch(node.id) : order
+          @positions[node.id] = @horizontal ? [cursor, node_order] : [node_order, cursor]
           order += (@horizontal ? height : width) + @node_gap
         end
         cursor += @groups[rank].map { |node| @horizontal ? @sizes[node.id][0] : @sizes[node.id][1] }.max.to_i
@@ -226,6 +249,51 @@ module MermaidTerm::Flowchart
         @width += outer_span + 5
       end
       @width += @ast.edges.map { |edge| Text.width(edge.label.to_s, ambiguous_width: @ambiguous_width) }.max.to_i + 2
+    end
+
+    def group_band_positions
+      indices = @ast.nodes.each_with_index.to_h { |node, index| [node.id, index] }
+      groups = @ast.subgraphs.select { |group| !group.parent && group.node_ids.any? }
+      ranges = groups.to_h do |group|
+        members = group.node_ids.filter_map { |id| indices[id] }
+        [group.id, [members.min, members.max]]
+      end
+      groups.sort_by! { |group| ranges[group.id].first }
+      keys = @ast.nodes.to_h do |node|
+        group = groups.find { |candidate| candidate.node_ids.include?(node.id) }
+        slot = groups.count { |candidate| ranges[candidate.id].last < indices[node.id] }
+        [node.id, group ? [:group, group.id] : [:outside, slot]]
+      end
+      order = (0..groups.length).flat_map do |slot|
+        [[:outside, slot], ([:group, groups[slot].id] if groups[slot])].compact
+      end
+      widths = order.to_h { |key| [key, 0] }
+      @groups.each_value do |nodes|
+        nodes.group_by { |node| keys[node.id] }.each do |key, members|
+          size = members.sum { |node| @horizontal ? @sizes[node.id][1] : @sizes[node.id][0] } +
+                 [members.length - 1, 0].max * @node_gap
+          widths[key] = [widths[key], size].max
+        end
+      end
+      groups.each do |group|
+        key = [:group, group.id]
+        widths[key] = [widths[key], Text.width(group.label) + @cluster_margin * 2 + 4].max
+      end
+      order.select! { |key| widths[key].positive? }
+      starts = {}
+      cursor = 1 + @cluster_margin
+      order.each do |key|
+        starts[key] = cursor
+        cursor += widths[key] + @node_gap + @cluster_margin * 2
+      end
+      @groups.values.flatten.to_h do |node|
+        key = keys.fetch(node.id)
+        peers = @groups.fetch(@ranks.fetch(node.id)).select { |candidate| keys[candidate.id] == key }
+        before = peers.take_while { |candidate| candidate.id != node.id }
+        offset = before.sum { |candidate| @horizontal ? @sizes[candidate.id][1] : @sizes[candidate.id][0] } +
+                 before.length * @node_gap
+        [node.id, starts.fetch(key) + offset]
+      end
     end
 
     def allocate_channel_tracks
@@ -318,6 +386,7 @@ module MermaidTerm::Flowchart
 
     def draw_edges
       @edge_item_indices = {}
+      @edge_label_indices = {}
       @oriented.each do |edge, from, to, _reversed|
         next if edge.stroke == :invisible
 
@@ -332,7 +401,10 @@ module MermaidTerm::Flowchart
         color = css_color(style, "stroke")
         @edge_item_indices[edge.id] = @items.length
         @items << Scene::Polyline.new(points: points, stroke: stroke, role: color ? :"fg:#{color}" : :edge, layer: :edge)
-        label_edge(edge, points) if edge.label && !edge.label.empty?
+        if edge.label && !edge.label.empty?
+          @edge_label_indices[edge.id] = @items.length
+          label_edge(edge, points)
+        end
       end
     end
 
@@ -380,10 +452,16 @@ module MermaidTerm::Flowchart
     end
 
     def marker_endpoint(edge, points, reversed)
-      forward = @horizontal ? :e : :s
-      backward = @horizontal ? :w : :n
-      put_marker(reversed ? points.first : points.last, edge.end_marker, reversed ? backward : forward)
-      put_marker(reversed ? points.last : points.first, edge.start_marker, reversed ? forward : backward)
+      end_tip, end_neighbor = reversed ? points.first(2) : points.last(2).reverse
+      start_tip, start_neighbor = reversed ? points.last(2).reverse : points.first(2)
+      put_marker(end_tip, edge.end_marker, tip_direction(end_tip, end_neighbor))
+      put_marker(start_tip, edge.start_marker, tip_direction(start_tip, start_neighbor))
+    end
+
+    def tip_direction(tip, neighbor)
+      return tip[0] > neighbor[0] ? :e : :w if tip[0] != neighbor[0]
+
+      tip[1] > neighbor[1] ? :s : :n
     end
 
     def put_marker(tip, kind, direction)
@@ -439,8 +517,12 @@ module MermaidTerm::Flowchart
         left = members.map { |(x, _), _| x }.min - padding
         top = members.map { |(_, y), _| y }.min - padding - 1
         right = members.map { |(x, _), (w, _)| x + w }.max + padding - 1
+        right = [right, left + Text.width(group.label) + 3].max
         bottom = members.map { |(_, y), (_, h)| y + h }.max + padding - 1
-        next if left.negative? || top.negative? || right >= @width || bottom >= @height
+        next if left.negative? || top.negative?
+
+        @width = [@width, right + 1].max
+        @height = [@height, bottom + 1].max
 
         rect = Scene::Rect.new(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
         @group_rects[group.id] = rect
@@ -461,6 +543,50 @@ module MermaidTerm::Flowchart
         points = clip_from_group(points, @group_rects[groups[0]]) if groups[0]
         points = clip_from_group(points.reverse, @group_rects[groups[1]]).reverse if groups[1]
         @items[index] = @items[index].with(points: points)
+      end
+    end
+
+    def avoid_unrelated_groups
+      detours = 0
+      @ast.edges.each do |edge|
+        index = @edge_item_indices[edge.id]
+        next unless index
+
+        line = @items[index]
+        blocked = @ast.subgraphs.any? do |group|
+          rect = @group_rects[group.id]
+          rect && !group.node_ids.include?(edge.from) && !group.node_ids.include?(edge.to) &&
+            crosses_frame?(line.points, rect)
+        end
+        next unless blocked
+
+        lane = @group_rects.values.map { |rect| rect.y + rect.height }.max + 2 + detours * 2
+        detours += 1
+        a = line.points.first
+        target = @oriented.find { |candidate| candidate.first.id == edge.id }[2]
+        tx, ty = @positions.fetch(target)
+        tw, th = @sizes.fetch(target)
+        b = @horizontal ? [tx + tw / 2, ty + th - 1] : [line.points.last[0], ty + th - 1]
+        @items[index] = line.with(points: [a, [a[0], lane], [b[0], lane], b])
+        @height = [@height, lane + 1].max
+        label_index = @edge_label_indices[edge.id]
+        next unless label_index
+
+        label = @items[label_index]
+        x = [(a[0] + b[0] - Text.width(label.string, ambiguous_width: @ambiguous_width)) / 2, 0].max
+        @items[label_index] = label.with(x: x, y: lane - 1)
+      end
+    end
+
+    def crosses_frame?(points, rect)
+      points.each_cons(2).any? do |(x1, y1), (x2, y2)|
+        if x1 == x2
+          x1 > rect.x && x1 < rect.x + rect.width - 1 &&
+            [y1, y2].max > rect.y && [y1, y2].min < rect.y + rect.height - 1
+        else
+          y1 > rect.y && y1 < rect.y + rect.height - 1 &&
+            [x1, x2].max > rect.x && [x1, x2].min < rect.x + rect.width - 1
+        end
       end
     end
 

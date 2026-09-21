@@ -7,6 +7,7 @@ Flow, state, class, and ER diagrams need predictable node placement.
 ## Decision
 
 Use DFS cycle reversal, longest path ranks, and up to eight alternating median sweeps. Count adjacent-rank crossings with a Fenwick tree after each sweep and keep the best order. Place nodes in rank bands.
+Keep nested subgraph members together during sweeps and give top-level groups separate order-axis bands across ranks.
 
 ## Reason
 

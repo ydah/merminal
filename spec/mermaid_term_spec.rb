@@ -320,6 +320,12 @@ RSpec.describe MermaidTerm do
                  frame.x + frame.width >= node.x + node.width &&
                  frame.y + frame.height >= node.y + node.height).to be(true)
         end
+        nodes.each do |id, node|
+          next if group.node_ids.include?(id)
+
+          expect(node.x + node.width <= frame.x || node.x >= frame.x + frame.width ||
+                 node.y + node.height <= frame.y || node.y >= frame.y + frame.height).to be(true)
+        end
       end
       edges = document.scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
       document.ast.edges.zip(edges).each do |edge, line|
@@ -358,6 +364,13 @@ RSpec.describe MermaidTerm do
     inner = frames.last
     expect(edges.first.points.last[1]).to eq(inner.y)
     expect(edges.last.points.first[0]).to eq(inner.x + inner.width - 1)
+  end
+
+  it "keeps long subgraph titles inside their frames" do
+    source = "flowchart TB\nsubgraph G[An unusually long group title]\nA-->B\nend\n"
+    document = described_class.parse(source)
+    frame = document.scene.items.grep(MermaidTerm::Scene::Box).find { |item| item.role == :container_border }.rect
+    expect(frame.width).to be >= MermaidTerm::Text.width("An unusually long group title") + 4
   end
 
   it "accepts arbitrary bytes without leaking encoding exceptions" do

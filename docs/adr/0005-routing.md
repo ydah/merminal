@@ -7,6 +7,7 @@ Edges should avoid boxes in layered diagrams.
 ## Decision
 
 Route adjacent rank edges through rank channels and long or cyclic edges outside node bands.
+Route an edge below subgraph frames when neither endpoint belongs to a frame it would cross.
 
 ## Reason
 
