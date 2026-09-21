@@ -6,6 +6,11 @@ require "rake"
 
 RSpec::Core::RakeTask.new(:spec)
 
+desc "Require at least 90% line coverage"
+task :coverage do
+  ruby "tools/coverage.rb"
+end
+
 desc "Check Ruby code and repository invariants"
 task :lint do
   ruby "tools/lint.rb"

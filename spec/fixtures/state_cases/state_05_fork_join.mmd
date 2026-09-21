@@ -1,0 +1,9 @@
+stateDiagram-v2
+  state Split <<fork>>
+  state Merge <<join>>
+  [*] --> Split
+  Split --> WorkA
+  Split --> WorkB
+  WorkA --> Merge
+  WorkB --> Merge
+  Merge --> [*]

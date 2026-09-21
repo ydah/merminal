@@ -28,7 +28,7 @@ module MermaidTerm::Diagrams
         when ""
           next
         else
-          findings << Diagrams.finding("unrecognized timeline statement", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("unrecognized timeline statement", source, index + 1)
         end
       end
       [Diagram.new(title: title, events: events.freeze), findings]

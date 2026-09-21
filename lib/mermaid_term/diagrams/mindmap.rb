@@ -20,7 +20,7 @@ module MermaidTerm::Diagrams
           stack.pop
         end
         if nodes.any? && stack.empty?
-          findings << Diagrams.finding("mindmap node has no parent", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("mindmap node has no parent", source, index + 1)
           next
         end
         raw = line.strip

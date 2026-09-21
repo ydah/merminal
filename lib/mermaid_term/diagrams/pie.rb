@@ -21,14 +21,14 @@ module MermaidTerm::Diagrams
         when /\A["'](.+?)["']\s*:\s*(-?\d+(?:\.\d+)?)\z/
           value = Regexp.last_match(2).to_f
           if value.negative?
-            findings << Diagrams.finding("pie values must be nonnegative", source, index + 1)
+            findings << MermaidTerm::Diagrams.finding("pie values must be nonnegative", source, index + 1)
           else
             entries << [Regexp.last_match(1), value]
           end
         when ""
           next
         else
-          findings << Diagrams.finding("unrecognized pie statement", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("unrecognized pie statement", source, index + 1)
         end
       end
       [Diagram.new(title: title, show_data: show_data, entries: entries.freeze), findings]

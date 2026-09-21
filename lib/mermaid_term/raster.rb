@@ -138,7 +138,12 @@ module MermaidTerm
         in Scene::Text
           x = item.x
           Text.each_cell(item.string, ambiguous_width: ambiguous_width) do |char, cells|
-            grid.put(x, item.y, charset == :ascii ? ascii(char) : char, item.role, ambiguous_width: ambiguous_width)
+            if charset == :ascii && cells == 2
+              grid.put(x, item.y, "?", item.role)
+              grid.put(x + 1, item.y, "?", item.role)
+            else
+              grid.put(x, item.y, charset == :ascii ? ascii(char) : char, item.role, ambiguous_width: ambiguous_width)
+            end
             x += cells
           end
         in Scene::Marker

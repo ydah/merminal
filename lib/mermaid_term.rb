@@ -36,13 +36,14 @@ module MermaidTerm
 
     # Parse a Mermaid document and collect recoverable diagnostics.
     def parse(input, strict: false)
-      source = Source.parse(input)
+      source = Ractor.make_shareable(Source.parse(input))
       keyword = source.lines.first.to_s.lstrip[/\A[^\s;]+/]
       plugin = @plugins.find { |candidate| candidate.keywords.include?(keyword) }
       raise UnsupportedDiagramError, "unsupported diagram: #{keyword || '(empty)'}" unless plugin
 
       ast, findings = plugin.parse(source)
-      diagnostics = (source.diagnostics + findings).freeze
+      ast = Ractor.make_shareable(ast)
+      diagnostics = Ractor.make_shareable(source.diagnostics + findings)
       raise SyntaxError, diagnostics.select { |d| d.severity == :error }.map(&:message).join("; ") if strict && diagnostics.any? { |d| d.severity == :error }
 
       Document.new(type: plugin.diagram_type, ast: ast, diagnostics: diagnostics, source: source, plugin: plugin)
@@ -64,11 +65,11 @@ module MermaidTerm
   Document = Data.define(:type, :ast, :diagnostics, :source, :plugin) do
     def scene(**options)
       picture = plugin.layout(ast, **options)
-      return picture unless source.title
+      return Ractor.make_shareable(picture) unless source.title
 
       title = Scene::Text.new(x: 0, y: 0, string: source.title, role: :emphasis, layer: :label, emphasis: nil)
-      Scene.new(width: [picture.width, Text.width(source.title)].max, height: picture.height + 1,
-                items: ([title] + picture.items.map { |item| Scene.translate(item, dy: 1) }).freeze)
+      Ractor.make_shareable(Scene.new(width: [picture.width, Text.width(source.title)].max, height: picture.height + 1,
+                                       items: ([title] + picture.items.map { |item| Scene.translate(item, dy: 1) }).freeze))
     end
 
     def render(width: nil, fit: :compact, compact: false, **options)

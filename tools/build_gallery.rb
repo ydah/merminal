@@ -3,7 +3,7 @@
 require "cgi"
 require_relative "../lib/mermaid_term"
 
-cards = Dir.glob(File.expand_path("../spec/fixtures/*.mmd", __dir__)).sort.map do |path|
+cards = Dir.glob(File.expand_path("../spec/fixtures/**/*.mmd", __dir__)).sort.map do |path|
   source = File.read(path)
   name = File.basename(path, ".mmd")
   unicode = MermaidTerm.render(source)

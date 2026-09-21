@@ -48,13 +48,47 @@ module MermaidTerm
         header_parts = header.to_s.split(";", 2)
         words = header_parts[0].to_s.split
         @direction = words[1].to_sym if DIRECTIONS.include?(words[1])
-        parse_statement(header_parts[1].to_s.strip, @source.line_map.first || 1) if header_parts[1]
+        split_statements(header_parts[1].to_s).each { |statement| parse_statement(statement.strip, @source.line_map.first || 1) } if header_parts[1]
         rest.each_with_index do |line, index|
-          line.to_s.split(";", -1).each { |statement| parse_statement(statement.strip, @source.line_map[index + 1] || 1) }
+          split_statements(line.to_s).each { |statement| parse_statement(statement.strip, @source.line_map[index + 1] || 1) }
+        end
+        @subgraphs.each do |group|
+          representative = group.node_ids.first
+          next unless representative
+
+          @edges.map! do |edge|
+            edge.with(from: edge.from == group.id ? representative : edge.from,
+                      to: edge.to == group.id ? representative : edge.to)
+          end
+          @nodes.delete(group.id) unless group.node_ids.include?(group.id)
         end
         @diagnostics << Diagnostic.new(severity: :error, message: "unclosed subgraph", line: @source.line_map.last || 1, column: 1, length: 1) unless @stack.empty?
         [Diagram.new(direction: @direction, nodes: @nodes.values.freeze, edges: @edges.freeze,
                      subgraphs: @subgraphs.freeze, styles: @styles.freeze), @diagnostics.freeze]
+      end
+
+      def split_statements(line)
+        statements = []
+        current = +""
+        quote = nil
+        depth = 0
+        line.each_char do |char|
+          if quote
+            quote = nil if char == quote
+          elsif char == '"' || char == "'"
+            quote = char
+          elsif ["(", "[", "{"].include?(char)
+            depth += 1
+          elsif [")", "]", "}"].include?(char)
+            depth -= 1 if depth.positive?
+          elsif char == ";" && depth.zero?
+            statements << current
+            current = +""
+            next
+          end
+          current << char
+        end
+        statements << current
       end
 
       def parse_statement(statement, line)
@@ -151,7 +185,7 @@ module MermaidTerm
           @nodes[id] = Node.new(id: id, label: shape ? label : previous&.label || label,
                                 shape: shape || previous&.shape || :rectangle,
                                 classes: ((previous&.classes || []) + classes).uniq.freeze, source_pos: [line, scanner.pos])
-          @subgraphs.find { |group| group.id == @stack.last }&.node_ids&.push(id) if @stack.any?
+          @subgraphs.each { |group| group.node_ids << id if @stack.include?(group.id) } if @stack.any?
           ids << id
           scanner.skip(/\s*/)
           break unless scanner.scan(/&/)

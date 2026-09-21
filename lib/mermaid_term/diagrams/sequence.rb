@@ -32,15 +32,19 @@ module MermaidTerm::Diagrams
           side, ids, text = Regexp.last_match.captures
           ids.split(",").each { |id| participants[id.strip] ||= Participant.new(id: id.strip, label: id.strip, actor: false) }
           events << Event.new(kind: :note, from: ids.split(",").first.strip, to: ids.split(",").last.strip,
-                              text: text, extra: side.downcase)
+                              text: text.gsub(/<br\s*\/?\s*>/i, "\n"), extra: side.downcase)
         when /\A(loop|alt|opt|par|critical|break|rect)\b\s*(.*)\z/i
           blocks << Regexp.last_match(1)
           events << Event.new(kind: :block_start, from: nil, to: nil, text: Regexp.last_match(2), extra: Regexp.last_match(1))
         when /\A(else|and)\b\s*(.*)\z/i
-          events << Event.new(kind: :block_else, from: nil, to: nil, text: Regexp.last_match(2), extra: Regexp.last_match(1))
+          if blocks.empty?
+            findings << MermaidTerm::Diagrams.finding("unexpected sequence branch", source, index + 1)
+          else
+            events << Event.new(kind: :block_else, from: nil, to: nil, text: Regexp.last_match(2), extra: Regexp.last_match(1))
+          end
         when "end"
           if blocks.empty?
-            findings << Diagrams.finding("unexpected end", source, index + 1)
+            findings << MermaidTerm::Diagrams.finding("unexpected end", source, index + 1)
           else
             blocks.pop
             events << Event.new(kind: :block_end, from: nil, to: nil, text: nil, extra: nil)
@@ -54,10 +58,10 @@ module MermaidTerm::Diagrams
         when ""
           next
         else
-          findings << Diagrams.finding("unrecognized sequence statement", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("unrecognized sequence statement", source, index + 1)
         end
       end
-      findings << Diagrams.finding("unclosed sequence block", source, source.lines.length - 1) unless blocks.empty?
+      findings << MermaidTerm::Diagrams.finding("unclosed sequence block", source, source.lines.length - 1) unless blocks.empty?
       [Diagram.new(participants: participants.values.freeze, events: events.freeze), findings]
     end
 
@@ -66,16 +70,22 @@ module MermaidTerm::Diagrams
       return builder.scene if ast.participants.empty?
 
       ids = ast.participants.map(&:id)
-      gaps = Array.new([ids.length - 1, 0].max, 14)
+      gaps = ast.participants.each_cons(2).map do |left, right|
+        [14, (Text.width(left.label) + 5) / 2 + (Text.width(right.label) + 5) / 2 + 4].max
+      end
+      numbered = false
       ast.events.each do |event|
+        numbered = true if event.kind == :autonumber
         next unless event.kind == :message && event.from != event.to
 
         a, b = [ids.index(event.from), ids.index(event.to)].sort
-        needed = Text.width(event.text) + 4
+        needed = Text.width(event.text) + 4 + (numbered ? 6 : 0)
         current = gaps[a...b].sum
         gaps[b - 1] += needed - current if current < needed
       end
-      centers = [5]
+      left_note = ast.events.select { |event| event.kind == :note && event.extra == "left of" && event.from == ids.first }
+      left_margin = left_note.map { |event| Text.width(event.text) + 4 }.max.to_i
+      centers = [5 + left_margin]
       gaps.each { |gap| centers << centers[-1] + gap }
       columns = ids.zip(centers).to_h
       rows = []
@@ -93,7 +103,7 @@ module MermaidTerm::Diagrams
         rows << [event, y, label]
         y += case event.kind
              when :message then event.from == event.to ? 4 : 3
-             when :note then 4
+             when :note then label.count("\n") + 4
              when :block_start, :block_else then 2
              else 1
              end
@@ -129,30 +139,34 @@ module MermaidTerm::Diagrams
         when :note
           from = columns.fetch(event.from)
           to = columns.fetch(event.to)
-          width = Text.width(label) + 4
+          width = [label.split("\n").map { |part| Text.width(part) }.max.to_i + 4,
+                   event.extra == "over" ? (to - from).abs + 5 : 0].max
           x = event.extra == "left of" ? from - width - 2 : event.extra == "right of" ? to + 2 : (from + to - width) / 2
           x = [x, 0].max
-          builder.box(x, row, width, 3, role: :container_border)
+          builder.box(x, row, width, label.count("\n") + 3, role: :container_border)
           builder.text(x + 2, row + 1, label)
         when :block_start
-          blocks << [row, event.extra, label]
+          blocks << [row, event.extra, label, blocks.length]
         when :block_else
-          builder.line([[0, row], [centers.last + 6, row]], role: :container_border, pattern: :dotted)
-          builder.text(2, row + 1, "#{event.extra} #{label}", role: :container_title)
+          inset = blocks.length - 1
+          builder.line([[inset, row], [centers.last + 6 - inset, row]], role: :container_border, pattern: :dotted)
+          builder.text(inset + 2, row + 1, "#{event.extra} #{label}", role: :container_title)
         when :block_end
-          start, kind, title = blocks.pop
+          start, kind, title, inset = blocks.pop
           next unless start
 
-          builder.box(0, start, centers.last + 7, row - start + 1, role: :container_border)
-          builder.text(2, start, "#{kind} #{title}", role: :container_title)
+          builder.box(inset, start, centers.last + 7 - inset * 2, row - start + 1, role: :container_border)
+          builder.text(inset + 2, start, "#{kind} #{title}", role: :container_title)
         when :activate
-          active[event.from] << row
+          active[event.from] << [row, active[event.from].length]
         when :deactivate
-          start = active[event.from].pop
-          builder.box(columns.fetch(event.from), start, 1, row - start + 1) if start
+          start, depth = active[event.from].pop
+          builder.box(columns.fetch(event.from) - 1 + depth * 2, start, 3, row - start + 1) if start
         end
       end
-      active.each { |id, starts| starts.each { |start| builder.box(columns.fetch(id), start, 1, bottom - start + 1) } }
+      active.each do |id, starts|
+        starts.each { |start, depth| builder.box(columns.fetch(id) - 1 + depth * 2, start, 3, bottom - start + 1) }
+      end
       builder.scene
     end
 

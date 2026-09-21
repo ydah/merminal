@@ -73,6 +73,19 @@ RSpec.describe MermaidTerm do
     ENV["COLORTERM"] = previous_color
   end
 
+  it "keeps semicolons inside quoted labels" do
+    document = described_class.parse('graph LR; A["x;y"]; A-->B')
+    expect(document.ast.nodes.map(&:label)).to eq(["x;y", "B"])
+    expect(document.ast.edges.length).to eq(1)
+    expect(document.diagnostics).to be_empty
+  end
+
+  it "gives converging arrows separate input cells" do
+    scene = described_class.parse("flowchart TB\nA-->C\nB-->C").scene
+    arrowheads = scene.items.grep(MermaidTerm::Scene::Marker).select { |item| item.kind == :arrow }
+    expect(arrowheads.map { |item| [item.x, item.y] }.uniq.length).to eq(2)
+  end
+
   it "fits the public render API without truncating content" do
     source = "graph TB\nA[Hello] --> B[World]\nA --> C[Other]"
     compact = described_class.render(source, width: 24)
@@ -119,7 +132,7 @@ RSpec.describe MermaidTerm do
 
   it "keeps randomly generated flowcharts inside their Scenes" do
     rng = Random.new(20_260_921)
-    100.times do
+    500.times do
       count = rng.rand(1..12)
       edges = Array.new(rng.rand(0..20)) do
         from, to = rng.rand(count), rng.rand(count)
@@ -138,6 +151,12 @@ RSpec.describe MermaidTerm do
         expect(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y).to be(true)
       end
       scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }.each do |edge|
+        [edge.points.first, edge.points.last].each do |x, y|
+          expect(boxes.any? do |box|
+            x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height &&
+              (x == box.x || x == box.x + box.width - 1 || y == box.y || y == box.y + box.height - 1)
+          end).to be(true)
+        end
         edge.points.each_cons(2) do |(x1, y1), (x2, y2)|
           distance = [(x2 - x1).abs, (y2 - y1).abs].max
           (0..distance).each do |step|
@@ -151,20 +170,27 @@ RSpec.describe MermaidTerm do
         right = label.x + MermaidTerm::Text.width(label.string)
         expect(boxes.none? { |box| label.y >= box.y && label.y < box.y + box.height && right > box.x && label.x < box.x + box.width }).to be(true)
       end
+      document.ast.nodes.each { |node| expect(output).to include(node.label) }
+      expect(document.render(charset: :ascii)).to match(/\A[\x20-\x7e\n]*\z/)
     end
   end
 
   it "accepts arbitrary bytes without leaking encoding exceptions" do
     rng = Random.new(118)
-    100.times do
-      bytes = Array.new(30) { rng.rand(256) }.pack("C*")
-      expect { described_class.render("graph LR\n".b + bytes) }.not_to raise_error
+    headers = %w[graph sequenceDiagram stateDiagram-v2 classDiagram erDiagram pie xychart-beta gantt timeline mindmap]
+    headers.each do |header|
+      20.times do
+        bytes = Array.new(30) { rng.rand(256) }.pack("C*")
+        expect { described_class.render("#{header}\n".b + bytes) }.not_to raise_error
+      end
     end
   end
 
   it "matches the reviewed Unicode gallery snapshots" do
-    Dir.glob(File.expand_path("fixtures/*.mmd", __dir__)).each do |path|
-      expect(described_class.render(File.read(path))).to match_snapshot(File.basename(path, ".mmd"))
+    Dir.glob(File.expand_path("fixtures/**/*.mmd", __dir__)).each do |path|
+      document = described_class.parse(File.read(path))
+      expect(document.diagnostics.select { |diagnostic| diagnostic.severity == :error }).to be_empty
+      expect(document.render).to match_snapshot(File.basename(path, ".mmd"))
     end
   end
 end

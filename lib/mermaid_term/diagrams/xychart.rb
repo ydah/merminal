@@ -29,14 +29,14 @@ module MermaidTerm::Diagrams
           kind = Regexp.last_match(1)
           values = Regexp.last_match(2).split(",").map { |value| Float(value.strip, exception: false) }
           if values.any?(&:nil?)
-            findings << Diagrams.finding("invalid chart value", source, index + 1)
+            findings << MermaidTerm::Diagrams.finding("invalid chart value", source, index + 1)
           else
             (kind == "bar" ? bars : lines) << values
           end
         when ""
           next
         else
-          findings << Diagrams.finding("unrecognized xychart statement", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("unrecognized xychart statement", source, index + 1)
         end
       end
       [Diagram.new(title: title, labels: labels.freeze, minimum: minimum, maximum: maximum,

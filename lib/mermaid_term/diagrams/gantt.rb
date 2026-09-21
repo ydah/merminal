@@ -56,10 +56,10 @@ module MermaidTerm::Diagrams
         when "", /\A(?:axisFormat|todayMarker|tickInterval)\b/
           next
         else
-          findings << Diagrams.finding("unrecognized gantt statement", source, index + 1)
+          findings << MermaidTerm::Diagrams.finding("unrecognized gantt statement", source, index + 1)
         end
       rescue ArgumentError
-        findings << Diagrams.finding("invalid gantt task", source, index + 1)
+        findings << MermaidTerm::Diagrams.finding("invalid gantt task", source, index + 1)
       end
       [Diagram.new(title: title, tasks: tasks.freeze), findings]
     end
