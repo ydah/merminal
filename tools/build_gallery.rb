@@ -44,11 +44,12 @@ cards = Dir.glob(File.expand_path("../spec/fixtures/**/*.mmd", __dir__)).sort.ma
   panes = variants.map { |variant, picture| "<div><h3>#{variant}</h3><pre>#{picture}</pre></div>" }.join
   "<section><h2>#{CGI.escapeHTML(name)}</h2><div class=panes>#{panes}</div></section>"
 end
-html = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>MermaidTerm gallery</title>" \
+html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" \
+       "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>MermaidTerm gallery</title>" \
        "<style>body{font:16px system-ui;background:#111827;color:#f9fafb;margin:2rem}" \
        "section{margin-bottom:3rem}.panes{display:flex;flex-wrap:wrap;gap:1rem}h3{margin:.25rem 0}" \
        "pre{background:#1f2937;padding:1rem;overflow:auto;color:#e5e7eb}</style>" \
-       "<h1>MermaidTerm gallery</h1>#{cards.join}</html>"
+       "</head><body><h1>MermaidTerm gallery</h1>#{cards.join}</body></html>"
 destination = File.expand_path("../gallery.html", __dir__)
 File.write(destination, html)
 puts destination

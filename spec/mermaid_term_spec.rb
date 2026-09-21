@@ -12,6 +12,12 @@ RSpec.describe MermaidTerm do
     expect(observed).to eq(Array.new(3) { expected_rng.rand(100) })
   end
 
+  it "reports a snapshot mismatch with its cell and code points" do
+    matcher = match_snapshot("scene_demo_unicode")
+    expect(matcher.matches?("x")).to be(false)
+    expect(matcher.failure_message).to match(/1:1: U\+[0-9A-F]{4} .* expected, U\+0078 x actual/)
+  end
+
   it "measures CJK, combining marks and ambiguous characters in cells" do
     expect(MermaidTerm::Text.width("abc")).to eq(3)
     expect(MermaidTerm::Text.width("日本語abc")).to eq(9)
@@ -42,6 +48,16 @@ RSpec.describe MermaidTerm do
     expect(source.title).to eq("Chart")
     expect(source.line_map).to eq([6, 7])
     expect(source.diagnostics.first.severity).to eq(:info)
+  end
+
+  it "handles empty and malformed source directives without losing lines" do
+    expect(MermaidTerm::Source.parse("").lines).to be_empty
+    source = MermaidTerm::Source.parse("---\ntitle: Plan\n---\n%%{init: {'theme':'solarized'}}%%\n%% note\ngraph LR\nA-->B\n")
+    expect([source.title, source.directives["theme"], source.line_map]).to eq(["Plan", "solarized", [6, 7]])
+    invalid = MermaidTerm::Source.parse("%%{init: broken}%%\ngraph LR\n")
+    expect(invalid.diagnostics.map(&:severity)).to include(:warning)
+    unclosed = MermaidTerm::Source.parse("---\ntitle: Plan\n")
+    expect(unclosed.diagnostics.map(&:message)).to include("unclosed frontmatter")
   end
 
   it "renders connected boxes in both charsets and all directions" do
@@ -200,6 +216,23 @@ RSpec.describe MermaidTerm do
       expect(document.render).not_to be_empty
       expect(document.render(charset: :ascii)).to match(/\A[\x20-\x7e\n]*\z/)
     end
+  end
+
+  it "registers a diagram plugin and rejects duplicate keywords" do
+    plugin = Module.new do
+      def self.diagram_type = :sample
+      def self.keywords = %w[sampleDiagram]
+      def self.parse(_source) = [nil, []]
+      def self.layout(_ast, **) = MermaidTerm::Scene.new(width: 1, height: 1,
+                                                         items: [MermaidTerm::Scene::Glyph.new(x: 0, y: 0, char: "X",
+                                                                                               role: :node_text, layer: :label)])
+    end
+    registry = MermaidTerm.instance_variable_get(:@plugins)
+    described_class.register(plugin)
+    expect(described_class.render("sampleDiagram")).to eq("X")
+    expect { described_class.register(plugin) }.to raise_error(ArgumentError, /duplicate/)
+  ensure
+    registry&.delete(plugin)
   end
 
   it "keeps wide first sequence participants inside the Scene" do
