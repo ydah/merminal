@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "open3"
+require "tmpdir"
 
 RSpec.describe MermaidTerm do
   it "reproduces property runs from a seed" do
@@ -12,10 +13,28 @@ RSpec.describe MermaidTerm do
   end
 
   it "measures CJK, combining marks and ambiguous characters in cells" do
+    expect(MermaidTerm::Text.width("abc")).to eq(3)
     expect(MermaidTerm::Text.width("日本語abc")).to eq(9)
+    expect(MermaidTerm::Text.width("한글")).to eq(4)
+    expect(MermaidTerm::Text.width("ｶﾅ")).to eq(2)
+    expect(MermaidTerm::Text.width("ＡＢ")).to eq(4)
     expect(MermaidTerm::Text.width("e\u0301")).to eq(1)
+    expect(MermaidTerm::Text.width("a\uFE0F")).to eq(1)
     expect(MermaidTerm::Text.width("·", ambiguous_width: 2)).to eq(2)
     expect(MermaidTerm::Text.wrap("日本語abc", 4)).to eq(%w[日本 語ab c])
+  end
+
+  it "covers every light box-drawing arm mask and sorted width ranges" do
+    table = MermaidTerm::Raster::BOX_DRAWING
+    (1..15).each do |mask|
+      key = 4.times.map { |index| mask[index] == 1 ? 1 : 0 }.join
+      expect(table).to have_key(key)
+    end
+    %w[┼ ╋ ╬ ┿ ╪].each { |character| expect(table).to have_value(character) }
+    %i[WIDE ZERO AMBIGUOUS].each do |name|
+      ranges = MermaidTerm::Text.const_get(name)
+      expect(ranges.each_cons(2).all? { |a, b| a.last < b.first }).to be(true)
+    end
   end
 
   it "keeps original source line numbers through frontmatter and comments" do
@@ -139,6 +158,29 @@ RSpec.describe MermaidTerm do
     expect(errors).to include("unclosed node shape")
   end
 
+  it "handles CLI files, Markdown, output, color, and exit codes" do
+    exe = File.expand_path("../exe/mmterm", __dir__)
+    Dir.mktmpdir do |directory|
+      markdown = File.join(directory, "diagrams.md")
+      output_path = File.join(directory, "picture.txt")
+      File.write(markdown, "# Example\n```mermaid\ngraph LR\nA-->B\n```\n")
+      output, errors, status = Open3.capture3(RbConfig.ruby, exe, "--ascii", "-o", output_path, markdown)
+      expect([status.exitstatus, output, errors]).to eq([0, "", ""])
+      expect(File.read(output_path)).to include("A", "B", ">")
+
+      output, errors, status = Open3.capture3({ "NO_COLOR" => nil, "FORCE_COLOR" => "1" },
+                                              RbConfig.ruby, exe, "--color", "always", markdown)
+      expect([status.exitstatus, errors]).to eq([0, ""])
+      expect(output).to include("\e[")
+    end
+    _, _, status = Open3.capture3(RbConfig.ruby, exe, "--strict", stdin_data: "graph LR\nA[bad\n")
+    expect(status.exitstatus).to eq(1)
+    _, _, status = Open3.capture3(RbConfig.ruby, exe, stdin_data: "unknownDiagram\n")
+    expect(status.exitstatus).to eq(3)
+    _, _, status = Open3.capture3(RbConfig.ruby, exe, "--width", "0", stdin_data: "graph LR\nA-->B\n")
+    expect(status.exitstatus).to eq(2)
+  end
+
   it "renders every registered diagram with Unicode and ASCII" do
     samples = {
       sequence: "sequenceDiagram\nparticipant A as Alice\nparticipant B as Bob\nA->>B: Hello\nB-->>A: Hi\n",
@@ -199,6 +241,22 @@ RSpec.describe MermaidTerm do
           expect(frame.x <= node.x && frame.y <= node.y &&
                  frame.x + frame.width >= node.x + node.width &&
                  frame.y + frame.height >= node.y + node.height).to be(true)
+        end
+      end
+      edges = document.scene.items.grep(MermaidTerm::Scene::Polyline).select { |item| item.role == :edge }
+      document.ast.edges.zip(edges).each do |edge, line|
+        groups.zip(frames).each do |group, frame|
+          next if group.node_ids.include?(edge.from) || group.node_ids.include?(edge.to)
+
+          line.points.each_cons(2) do |(x1, y1), (x2, y2)|
+            distance = [(x2 - x1).abs, (y2 - y1).abs].max
+            (0..distance).each do |step|
+              x = x1 + (x2 <=> x1) * step
+              y = y1 + (y2 <=> y1) * step
+              expect(x <= frame.x || x >= frame.x + frame.width - 1 ||
+                     y <= frame.y || y >= frame.y + frame.height - 1).to be(true)
+            end
+          end
         end
       end
       frames.combination(2).each do |a, b|

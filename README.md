@@ -59,6 +59,8 @@ The parser accepts a documented subset of each Mermaid diagram type. Unsupported
 | Timeline | [Timeline](docs/syntax/timeline.md) |
 | Mindmap | [Mindmap](docs/syntax/mindmap.md) |
 
+The [gallery](gallery.html) shows Unicode, ASCII, and the four color themes for every fixture.
+
 Pie charts appear as horizontal bars because cell based terminals communicate proportions more clearly that way. Unicode ambiguous width defaults to one cell; set `ambiguous_width: 2` for terminals that use two. Emoji ZWJ sequences use the first grapheme code point's width, so some terminal fonts may differ. ASCII mode replaces non ASCII labels with `?`.
 
 This is an independent implementation. Thanks to [termaid](https://github.com/fasouto/termaid), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) for showing what terminal Mermaid tools can offer. Mermaid syntax belongs to the [Mermaid project](https://mermaid.js.org/).

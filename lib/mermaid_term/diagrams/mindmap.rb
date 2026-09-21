@@ -24,7 +24,9 @@ module MermaidTerm::Diagrams
           next
         end
         raw = line.strip
-        shape, label = if raw =~ /\A(.+?)\(\((.+)\)\)\z/
+        shape, label = if raw =~ /\A(.+?)\)\)(.+)\(\(\z/
+                         [:cloud, Regexp.last_match(2)]
+                       elsif raw =~ /\A(.+?)\(\((.+)\)\)\z/
                          [:circle, Regexp.last_match(2)]
                        elsif raw =~ /\A(.+?)\[(.+)\]\z/
                          [:rectangle, Regexp.last_match(2)]
@@ -47,7 +49,7 @@ module MermaidTerm::Diagrams
       children = ast.nodes.to_h { |node| [node.id, []] }
       ast.nodes.each { |node| children[node.parent] << node.id if node.parent }
       depth_widths = ast.nodes.group_by(&:depth).transform_values do |nodes|
-        nodes.map { |node| Text.width(node.label) + 4 }.max
+        nodes.map { |node| node_width(node) }.max
       end
       x_positions = {}
       depth_widths.keys.sort.each { |depth| x_positions[depth] = depth.zero? ? 0 : x_positions[depth - 1] + depth_widths[depth - 1] + 5 }
@@ -65,19 +67,28 @@ module MermaidTerm::Diagrams
       place.call(ast.nodes.first.id)
       ast.nodes.each do |node|
         x, y = x_positions[node.depth], y_positions[node.id]
-        width = Text.width(node.label) + 4
+        width = node_width(node)
         builder.box(x, y, width, 3, rounded: node.shape != :rectangle)
-        builder.text(x + 2, y + 1, node.label)
+        builder.text(x + (width - Text.width(node.label)) / 2, y + 1, node.label)
+        if %i[circle cloud].include?(node.shape)
+          left, right = node.shape == :circle ? %w[( )] : %w[~ ~]
+          builder.glyph(x, y + 1, left, role: :node_border)
+          builder.glyph(x + width - 1, y + 1, right, role: :node_border)
+        end
         next unless node.parent
 
         parent = ast.nodes[node.parent]
-        px = x_positions[parent.depth] + Text.width(parent.label) + 3
+        px = x_positions[parent.depth] + node_width(parent) - 1
         py = y_positions[parent.id] + 1
         cy = y + 1
         middle = (px + x) / 2
         builder.line([[px, py], [middle, py], [middle, cy], [x, cy]])
       end
       builder.scene
+    end
+
+    def self.node_width(node)
+      Text.width(node.label) + (%i[circle cloud].include?(node.shape) ? 6 : 4)
     end
   end
 end
