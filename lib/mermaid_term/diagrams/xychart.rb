@@ -136,8 +136,8 @@ module MermaidTerm::Diagrams
       points.each_cons(2) do |(x1, y1), (x2, y2)|
         steps = [(x2 - x1).abs, (y2 - y1).abs, 1].max
         (0..steps).each do |step_index|
-          x = (x1 + (x2 - x1) * step_index.to_f / steps).round
-          y = (y1 + (y2 - y1) * step_index.to_f / steps).round
+          x = (x1 * (steps - step_index) + x2 * step_index + steps / 2) / steps
+          y = (y1 * (steps - step_index) + y2 * step_index + steps / 2) / steps
           bit = [[0, 1, 2, 6], [3, 4, 5, 7]][x % 2][y % 4]
           key = [x / 2, y / 4]
           pixels[key] = pixels.fetch(key, 0) | (1 << bit)

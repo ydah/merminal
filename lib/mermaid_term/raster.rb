@@ -128,7 +128,7 @@ module MermaidTerm
 
     def rasterize(scene, charset: :unicode, rounded: true, ambiguous_width: 1, crossings: :plain)
       grid = Grid.new(scene.width, scene.height, crossings: crossings)
-      scene.items.sort_by { |item| Scene::LAYERS.fetch(item.layer, 3) }.each do |item|
+      scene.items.each_with_index.sort_by { |item, index| [Scene::LAYERS.fetch(item.layer, 3), index] }.each do |item, _|
         case item
         in Scene::Box
           r = item.rect

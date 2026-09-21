@@ -116,6 +116,15 @@ RSpec.describe MermaidTerm do
     expect(MermaidTerm::Output.render(MermaidTerm::Raster.rasterize(picture, crossings: :bridge))).to include("╶─│─╴")
   end
 
+  it "keeps insertion order for items on the same layer" do
+    glyph = MermaidTerm::Scene::Glyph
+    picture = MermaidTerm::Scene.new(width: 1, height: 1, items: [
+      glyph.new(x: 0, y: 0, char: "A", role: :series_1, layer: :marker),
+      glyph.new(x: 0, y: 0, char: "B", role: :series_2, layer: :marker)
+    ])
+    expect(MermaidTerm::Output.render(MermaidTerm::Raster.rasterize(picture))).to eq("B")
+  end
+
   it "parses modern shapes and applies Mermaid colors" do
     source = "flowchart LR\nA@{ shape: diamond } --> B[/Result/]\nclassDef hot fill:#f9f,stroke:#333,color:#000\nclass A hot"
     document = described_class.parse(source)
