@@ -194,6 +194,30 @@ RSpec.describe MermaidTerm do
     expect(work.grep(MermaidTerm::Flowchart::Layout::WorkNode).count { |node| node.kind == :label }).to eq(1)
   end
 
+  it "keeps ranked work nodes separated while aligning long edges" do
+    property(runs: 100, seed: 407) do |rng, record|
+      count = rng.rand(2..10)
+      source = "graph #{%w[TB LR].sample(random: rng)}\n" +
+               Array.new(count) { |index| "N#{index}" }.join("\n") + "\n" +
+               Array.new(rng.rand(1..16)) do
+                 "N#{rng.rand(count)} #{rng.rand(3).zero? ? '---->' : '-->'} N#{rng.rand(count)}"
+               end.join("\n")
+      record.call(source)
+      gap = rng.rand(1..4)
+      layout = MermaidTerm::Flowchart::Layout.new(described_class.parse(source).ast, node_gap: gap)
+      layout.scene
+      horizontal = layout.instance_variable_get(:@horizontal)
+      positions = layout.instance_variable_get(:@positions)
+      sizes = layout.instance_variable_get(:@sizes)
+      layout.instance_variable_get(:@groups).each_value do |nodes|
+        nodes.each_cons(2) do |a, b|
+          axis = horizontal ? 1 : 0
+          expect(positions.fetch(b.id)[axis] - positions.fetch(a.id)[axis]).to be >= sizes.fetch(a.id)[axis] + gap
+        end
+      end
+    end
+  end
+
   it "reserves disjoint spaces for edge labels" do
     source = "graph TB\nA -->|first-long-label| B\nC -->|second-long-label| D"
     labels = described_class.parse(source).scene.items.grep(MermaidTerm::Scene::Text)
