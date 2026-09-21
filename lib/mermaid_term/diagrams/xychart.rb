@@ -63,7 +63,8 @@ module MermaidTerm::Diagrams
       6.times do |tick|
         value = maximum - (maximum - minimum) * tick / 5.0
         y = plot_top + tick * 2
-        builder.text(0, y, Text.pad(format("%5g", value), 5, align: :right), role: :axis_label)
+        label = format("%g", value).sub(/(\.\d*?)0+\z/, '\1').delete_suffix(".")
+        builder.text(0, y, Text.pad(label, 5, align: :right), role: :axis_label)
       end
       builder.line([[plot_left - 1, plot_top], [plot_left - 1, plot_top + plot_height],
                     [plot_left + plot_width, plot_top + plot_height]], role: :axis)
