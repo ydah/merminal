@@ -526,7 +526,7 @@ module MermaidTerm::Flowchart
     end
 
     def outer_route(from, to, offset, edge_id)
-      # ponytail: long and cyclic edges use outside lanes; add channel segments if dense graphs need tighter layouts.
+      # ponytail: self loops use outside lanes; add a dedicated loop primitive if dense graphs need tighter layouts.
       a = port(from)
       b = port(to, end_port: true, edge_id: edge_id)
       track = @outer_track + offset
