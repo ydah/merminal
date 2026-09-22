@@ -1,0 +1,7 @@
+Releases
+
+Early
+2024 ● Prototype
+2025 ● Beta
+Stable
+2026 ● Version 1
