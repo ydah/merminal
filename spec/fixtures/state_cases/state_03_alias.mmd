@@ -1,0 +1,4 @@
+stateDiagram-v2
+  state "Waiting for input" as Waiting
+  [*] --> Waiting
+  Waiting --> Done : submit

@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> Running
+  state Running {
+    [*] --> First
+    First --> Second
+    Second --> [*]
+  }
+  Running --> [*]
