@@ -54,7 +54,7 @@ main { flex: 1; display: grid; align-items: center; }
 h1 { margin: 0; font-size: clamp(2.5rem, 5.2vw, 4.25rem); line-height: 1.08; letter-spacing: -.055em; }
 .summary { max-width: 34rem; margin: 1.5rem 0 1.25rem; color: var(--muted); font-size: 1.1rem; }
 .install { width: fit-content; padding: .65rem .9rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
-.install code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+.install code, pre, .terminal code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 .install code { font-size: .9rem; }
 .install code span, .prompt { color: var(--accent); }
 .actions { margin-top: 1.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
