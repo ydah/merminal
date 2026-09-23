@@ -68,7 +68,7 @@ h1 { margin: 0; font-size: clamp(2.5rem, 5.2vw, 4.25rem); line-height: 1.08; let
 .terminal-bar { min-height: 44px; padding: 0 1rem; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-bottom: 1px solid var(--border); color: var(--muted); font-size: .75rem; }
 .terminal-dots { display: flex; gap: 6px; }
 .terminal-dots i { width: 8px; height: 8px; border-radius: 50%; background: #56616a; }
-.terminal pre { margin: 0; padding: clamp(1.25rem, 3vw, 2rem); overflow-x: auto; color: var(--text); font-size: clamp(.7rem, 1vw, .9rem); line-height: 1; }
+.terminal pre { margin: 0; padding: clamp(1.25rem, 3vw, 2rem); overflow-x: auto; color: var(--text); font-size: clamp(.9rem, 1.2vw, 1rem); line-height: 1; }
 .terminal-note { margin: 0; padding: 0 1.25rem 1.25rem; color: var(--muted); font-size: .8rem; }
 
 footer { min-height: 68px; gap: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .8rem; }
