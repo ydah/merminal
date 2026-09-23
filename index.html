@@ -1,7 +1,62 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<meta http-equiv="refresh" content="0; url=gallery.html">
-<title>merminal gallery</title>
-<p><a href="gallery.html">Open the gallery</a></p>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#20262c">
+    <meta name="description" content="Render Mermaid diagrams in your terminal with merminal, a pure Ruby renderer for Unicode and ASCII terminals.">
+    <title>merminal — Mermaid diagrams in your terminal</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="./" aria-label="merminal home">merminal<span>.</span></a>
+      <nav aria-label="Main navigation">
+        <a href="./gallery.html">Gallery</a>
+        <a href="https://github.com/ydah/merminal/tree/main/docs/syntax">Syntax</a>
+        <a href="https://rubygems.org/gems/merminal">RubyGems</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="intro">
+          <p class="eyebrow">A PURE RUBY MERMAID RENDERER</p>
+          <h1 id="hero-title">Mermaid diagrams,<br>in your terminal.</h1>
+          <p class="summary">Turn Mermaid source into readable diagrams in Unicode or ASCII. No browser or Node.js required.</p>
+          <div class="install" aria-label="Install command">
+            <code><span aria-hidden="true">$</span> gem install merminal</code>
+          </div>
+          <div class="actions">
+            <a class="button button-primary" href="https://rubygems.org/gems/merminal">Install the gem <span aria-hidden="true">↗</span></a>
+            <a class="button button-secondary" href="./gallery.html">Explore the gallery</a>
+          </div>
+          <ul class="highlights" aria-label="Highlights">
+            <li>Pure Ruby</li>
+            <li>Unicode and ASCII</li>
+            <li>CLI and Ruby API</li>
+          </ul>
+        </div>
+
+        <figure class="terminal">
+          <figcaption class="terminal-bar">
+            <span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>merminal</span>
+            <span aria-hidden="true"></span>
+          </figcaption>
+          <pre><code><span class="prompt">$</span> merminal diagram.mmd
+
+   ┌─────┐   ┌─────┐
+   │  A  ├──▶┤  B  │
+   └─────┘   └─────┘</code></pre>
+          <p class="terminal-note">Mermaid in. Terminal out.</p>
+        </figure>
+      </section>
+    </main>
+
+    <footer>
+      <span>Open source under the MIT License</span>
+      <a href="https://github.com/ydah/merminal">View on GitHub <span aria-hidden="true">↗</span></a>
+    </footer>
+  </body>
 </html>

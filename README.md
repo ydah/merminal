@@ -9,6 +9,8 @@
 [![Ruby 3.3+](https://img.shields.io/badge/Ruby-3.3%2B-CC342D)](merminal.gemspec)
 [![MIT license](https://img.shields.io/badge/License-MIT-blue)](LICENSE.txt)
 
+[Website](https://ydah.github.io/merminal/) · [Gallery](https://ydah.github.io/merminal/gallery.html)
+
 [Quick start](#quick-start) · [Features](#features) · [Diagram support](#diagram-support) · [Ruby API](#ruby-api) · [Development](#development)
 
 </div>
